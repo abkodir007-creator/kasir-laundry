@@ -1,24 +1,34 @@
-/* Kasir Laundry — tema terang, dioptimalkan untuk layar sentuh tablet */
+/* StarWash Laundry — tema terang, dioptimalkan untuk layar sentuh tablet.
+
+   Palet resmi StarWash:
+     Merah  #E11D2A   Navy      #0D1B3D   Putih     #FFFFFF
+     Abu md #EDEDED   Abu tua   #6B6F76   Biru muda #CFE8FF
+
+   Pembagian perannya: navy jadi rangka (menu, teks, judul), merah khusus
+   tindakan utama, dan warna status (lunas/terlambat/menunggu) sengaja
+   dipisahkan dari warna merek supaya kasir tetap bisa membacanya sekilas. */
 :root {
-  --bg: #f1f5f9;
+  --bg: #ededed;
   --surface: #ffffff;
-  --surface-2: #f8fafc;
-  --border: #e2e8f0;
-  --text: #0f172a;
-  --muted: #64748b;
-  --brand: #0f766e;
-  --brand-dark: #115e59;
-  --brand-soft: #ccfbf1;
-  --danger: #dc2626;
-  --danger-soft: #fee2e2;
+  --surface-2: #f6f7f9;
+  --border: #dcdfe4;
+  --text: #0d1b3d;
+  --muted: #6b6f76;
+  --brand: #0d1b3d;
+  --brand-dark: #060f24;
+  --brand-soft: #cfe8ff;
+  --aksen: #e11d2a;
+  --aksen-gelap: #b3121f;
+  --danger: #b3121f;
+  --danger-soft: #fdecee;
   --warn: #b45309;
   --warn-soft: #fef3c7;
   --ok: #15803d;
   --ok-soft: #dcfce7;
   --info: #1d4ed8;
-  --info-soft: #dbeafe;
+  --info-soft: #cfe8ff;
   --radius: 14px;
-  --shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 8px 24px rgba(15, 23, 42, .06);
+  --shadow: 0 1px 2px rgba(13, 27, 61, .06), 0 8px 24px rgba(13, 27, 61, .07);
   --tap: 52px;
 }
 
@@ -43,13 +53,13 @@ button, input, select, textarea { font: inherit; color: inherit; }
   width: 208px;
   flex: 0 0 208px;
   background: var(--brand);
-  color: #ecfeff;
+  color: #e9edf3;
   display: flex;
   flex-direction: column;
   padding: 16px 12px calc(12px + env(safe-area-inset-bottom));
   gap: 6px;
 }
-.brand { display: flex; align-items: center; gap: 10px; padding: 6px 8px 16px; font-weight: 700; }
+.brand { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 10px 6px 18px; font-weight: 700; }
 .brand-mark { font-size: 26px; }
 .brand-text { font-size: 16px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; }
 .nav-list { display: flex; flex-direction: column; gap: 4px; flex: 1; }
@@ -58,11 +68,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
   min-height: var(--tap);
   padding: 0 14px;
   border: 0; border-radius: 12px;
-  background: transparent; color: #d1fae5;
+  background: transparent; color: #c8cfdd;
   font-weight: 600; text-align: left; cursor: pointer;
 }
 .nav-item span { font-size: 20px; }
-.nav-item.is-active { background: rgba(255, 255, 255, .18); color: #fff; }
+.nav-item.is-active { background: var(--aksen); color: #fff; }
 .nav-foot { padding: 8px; }
 
 .main { flex: 1; overflow: auto; padding: 20px; padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
@@ -87,8 +97,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
 }
 .btn:active { transform: translateY(1px); }
-.btn-primary { background: var(--brand); border-color: var(--brand); color: #fff; }
-.btn-danger { background: var(--danger-soft); border-color: #fecaca; color: var(--danger); }
+/* Merah = tindakan utama (isi penuh). Merah muda = tindakan merusak.
+   Perbedaan isi penuh vs isi muda inilah yang memisahkan keduanya, bukan warna. */
+.btn-primary { background: var(--aksen); border-color: var(--aksen); color: #fff; }
+.btn-danger { background: var(--danger-soft); border-color: #f3c4c9; color: var(--danger); }
 .btn-ghost { background: transparent; }
 .btn-sm { min-height: 40px; padding: 0 12px; font-size: 14px; }
 .btn-block { width: 100%; }
@@ -105,7 +117,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   width: 100%;
 }
 textarea.input { min-height: 84px; resize: vertical; }
-.input:focus { outline: 2px solid var(--brand); outline-offset: 1px; }
+.input:focus { outline: 2px solid var(--aksen); outline-offset: 1px; }
 
 .row { display: flex; gap: 12px; }
 .row > * { flex: 1; }
@@ -172,6 +184,52 @@ tbody tr:last-child td { border-bottom: 0; }
 .stat-label { font-size: 13px; color: var(--muted); font-weight: 600; }
 .stat-value { font-size: 24px; font-weight: 800; margin-top: 4px; }
 
+/* ---------- Beranda ---------- */
+.stat-note { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.stat-hero { background: var(--brand); border-color: var(--brand); color: #fff; }
+.stat-hero .stat-label, .stat-hero .stat-note { color: var(--brand-soft); }
+.stat-hero .stat-value { font-size: 30px; }
+
+.beranda-bawah { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr); gap: 16px; align-items: start; }
+
+/* Grafik: satu seri, batang tipis, garis dasar yang tidak menonjol. */
+.grafik-batangan { display: flex; align-items: flex-end; gap: 6px; }
+.gb-kolom { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; }
+.gb-nilai {
+  font-size: 11px; font-weight: 700; color: var(--text);
+  font-variant-numeric: tabular-nums; min-height: 16px; white-space: nowrap;
+}
+.gb-jalur { width: 100%; height: 132px; display: flex; align-items: flex-end; border-bottom: 1px solid var(--border); }
+.gb-isi {
+  width: 100%; max-width: 34px; margin: 0 auto;
+  background: var(--brand); opacity: .45;
+  border-radius: 4px 4px 0 0;   /* ujung data membulat, pangkal menempel garis dasar */
+  transition: opacity .15s;
+}
+.gb-isi.kini { background: var(--aksen); opacity: 1; }
+.gb-kolom:hover .gb-isi { opacity: 1; }
+.gb-label { font-size: 12px; color: var(--muted); font-weight: 600; }
+.gb-label.kini { color: var(--aksen); }
+.grafik-tip { font-size: 13px; margin: 10px 0 0; min-height: 20px; }
+.grafik-tabel { margin-top: 8px; }
+.grafik-tabel summary { font-size: 13px; color: var(--muted); cursor: pointer; padding: 4px 0; }
+
+.perhatian-blok + .perhatian-blok { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.perhatian-judul { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 700; font-size: 14px; }
+.perhatian-daftar { list-style: none; margin: 8px 0 0; padding: 0; }
+.perhatian-daftar button {
+  width: 100%; min-height: 42px; padding: 4px 8px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  border: 0; border-radius: 10px; background: transparent; cursor: pointer; text-align: left; font-size: 14px;
+}
+.perhatian-daftar button:active { background: var(--surface-2); }
+
+/* ---------- Logo toko ----------
+   Logo bawaan berupa wordmark yang lebar, jadi diberi ruang selebar menu.
+   Logo unggahan yang berbentuk kotak tetap aman karena skalanya proporsional. */
+.brand-logo { width: 100%; max-width: 168px; max-height: 78px; object-fit: contain; }
+.masuk-logo { max-width: 220px; max-height: 96px; object-fit: contain; }
+
 /* ---------- Layar masuk (PIN) ---------- */
 .masuk {
   min-height: 100dvh;
@@ -188,7 +246,7 @@ tbody tr:last-child td { border-bottom: 0; }
   border: 1px solid var(--border); border-radius: 12px;
   background: var(--surface); cursor: pointer; text-align: left;
 }
-.orang.is-active { border-color: var(--brand); background: var(--brand-soft); }
+.orang.is-active { border-color: var(--aksen); background: var(--brand-soft); }
 .orang-nama { font-weight: 700; }
 
 .pin-titik { display: flex; justify-content: center; gap: 12px; margin: 4px 0 8px; }
@@ -196,7 +254,7 @@ tbody tr:last-child td { border-bottom: 0; }
   width: 14px; height: 14px; border-radius: 50%;
   border: 2px solid var(--brand); background: transparent;
 }
-.pin-titik span.isi { background: var(--brand); }
+.pin-titik span.isi { background: var(--aksen); border-color: var(--aksen); }
 .masuk-pesan { text-align: center; margin: 0 0 14px; font-size: 14px; min-height: 20px; }
 
 .tombol-angka { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
@@ -206,15 +264,15 @@ tbody tr:last-child td { border-bottom: 0; }
   background: var(--surface); font-size: 22px; font-weight: 700; cursor: pointer;
 }
 .tombol-angka button:active { background: var(--surface-2); }
-.tombol-angka .btn-primary { background: var(--brand); border-color: var(--brand); color: #fff; font-size: 16px; }
+.tombol-angka .btn-primary { background: var(--aksen); border-color: var(--aksen); color: #fff; font-size: 16px; }
 
 .nav-user { padding: 0 8px 8px; }
 .nav-user-nama { font-weight: 700; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-user-peran { font-size: 12px; opacity: .8; }
 
 /* ---------- Modal & toast ---------- */
-.modal { border: 0; border-radius: 18px; padding: 0; width: min(520px, 94vw); box-shadow: 0 24px 60px rgba(15, 23, 42, .25); }
-.modal::backdrop { background: rgba(15, 23, 42, .45); }
+.modal { border: 0; border-radius: 18px; padding: 0; width: min(520px, 94vw); box-shadow: 0 24px 60px rgba(13, 27, 61, .3); }
+.modal::backdrop { background: rgba(13, 27, 61, .5); }
 .modal-inner { padding: 20px; }
 .modal h3 { margin: 0 0 14px; font-size: 18px; }
 .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
@@ -222,7 +280,7 @@ tbody tr:last-child td { border-bottom: 0; }
 
 .toast {
   position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px);
-  background: #0f172a; color: #fff; padding: 12px 20px; border-radius: 999px;
+  background: var(--brand); color: #fff; padding: 12px 20px; border-radius: 999px;
   font-weight: 600; opacity: 0; pointer-events: none; transition: .2s; z-index: 50;
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
@@ -231,6 +289,7 @@ tbody tr:last-child td { border-bottom: 0; }
 @media (max-width: 1024px) {
   .pos { grid-template-columns: 1fr; }
   .cart { align-self: stretch; }
+  .beranda-bawah { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 720px) {

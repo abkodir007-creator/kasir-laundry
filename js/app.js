@@ -5,6 +5,7 @@
   const app = document.querySelector('.app');
 
   const halaman = {
+    beranda: Views.beranda,
     kasir: Views.kasir,
     pesanan: Views.pesanan,
     pelanggan: Views.pelanggan,
@@ -15,9 +16,9 @@
   };
 
   function buka(nama) {
-    // Menu yang tidak boleh diakses peran ini dialihkan ke Kasir.
-    const diminta = halaman[nama] ? nama : 'kasir';
-    const aktif = Auth.boleh(diminta) ? diminta : 'kasir';
+    // Menu yang tidak boleh diakses peran ini dialihkan ke Beranda.
+    const diminta = halaman[nama] ? nama : 'beranda';
+    const aktif = Auth.boleh(diminta) ? diminta : 'beranda';
     if (aktif !== diminta) U.toast('Menu itu khusus owner');
 
     navList.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('is-active', b.dataset.view === aktif));
@@ -35,6 +36,15 @@
       ? `<div class="nav-user-nama">${U.esc(u.nama)}</div>
          <div class="nav-user-peran">${u.peran === 'owner' ? 'Owner' : 'Pegawai'}</div>`
       : '';
+  }
+
+  /** Logo di menu samping. Logo unggahan owner menang atas logo bawaan. */
+  function segarkanMerek() {
+    const t = DB.toko();
+    const logo = t.logo || Merek.LOGO_TERANG;
+    document.getElementById('brand').innerHTML = logo
+      ? `<img class="brand-logo" src="${logo}" alt="${U.esc(t.nama)}">`
+      : `<span class="brand-mark">🧺</span><span class="brand-text">${U.esc(t.nama)}</span>`;
   }
 
   /** Layar PIN menggantikan seluruh aplikasi sampai berhasil masuk. */
@@ -56,9 +66,9 @@
     const layar = document.getElementById('layarMasuk');
     if (layar) layar.hidden = true;
     app.hidden = false;
-    document.getElementById('brandName').textContent = DB.toko().nama;
+    segarkanMerek();
     segarkanMenu();
-    buka(location.hash.slice(1) || 'kasir');
+    buka(location.hash.slice(1) || 'beranda');
     Views.ingatkanPinBawaan();
   }
 
@@ -97,7 +107,8 @@
   if (Auth.aktif()) mulai();
   else mintaMasuk();
 
-  // Dipakai halaman Pengguna saat akun yang sedang masuk berubah.
+  // Dipakai halaman Pengguna dan Pengaturan saat data yang ditampilkan berubah.
   window.SegarkanMenu = segarkanMenu;
+  window.SegarkanMerek = segarkanMerek;
   window.MintaMasuk = mintaMasuk;
 })();

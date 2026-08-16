@@ -182,13 +182,17 @@ tbody tr:last-child td { border-bottom: 0; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
 .stat-label { font-size: 13px; color: var(--muted); font-weight: 600; }
-.stat-value { font-size: 24px; font-weight: 800; margin-top: 4px; }
+.stat-value { font-size: 24px; font-weight: 800; margin-top: 4px; font-variant-numeric: tabular-nums; }
 
 /* ---------- Beranda ---------- */
 .stat-note { font-size: 12px; color: var(--muted); margin-top: 4px; }
 .stat-hero { background: var(--brand); border-color: var(--brand); color: #fff; }
 .stat-hero .stat-label, .stat-hero .stat-note { color: var(--brand-soft); }
-.stat-hero .stat-value { font-size: 30px; }
+.stat-hero .stat-value { font-size: 26px; }
+/* Kartu rugi: merah penuh supaya tidak mungkin terbaca sebagai laba. */
+.stat-rugi { background: var(--aksen-gelap); border-color: var(--aksen-gelap); color: #fff; }
+.stat-rugi .stat-label, .stat-rugi .stat-note { color: #fde2e5; }
+.stat-rugi .stat-value { font-size: 26px; }
 
 .beranda-bawah { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr); gap: 16px; align-items: start; }
 

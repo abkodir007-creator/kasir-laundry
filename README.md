@@ -94,8 +94,9 @@ pegawai di sana.
 | Menu | Owner | Pegawai |
 |---|:---:|:---:|
 | Beranda, Kasir, Pesanan, Pelanggan | ✅ | ✅ |
-| Omzet & piutang di Beranda | ✅ | — |
-| Laporan omzet | ✅ | — |
+| Omzet, laba & piutang di Beranda | ✅ | — |
+| Laporan omzet & laba | ✅ | — |
+| Pengeluaran | ✅ | — |
 | Layanan & harga | ✅ | — |
 | Pengaturan, Pengguna | ✅ | — |
 | Hapus pesanan | ✅ | — |
@@ -125,8 +126,12 @@ shift; aplikasi tidak mengunci sendiri, dan sesi berakhir saat aplikasi ditutup.
 - **Struk** — cetak (format 80 mm, cocok printer thermal atau simpan PDF) dan
   kirim ke WhatsApp pelanggan dengan sekali ketuk.
 - **Pelanggan** — otomatis terkumpul dari riwayat, lengkap dengan total belanja.
-- **Laporan** — omzet, jumlah pesanan, piutang, cucian belum diambil, rekap per
-  hari dan layanan terlaris (1 / 7 / 30 hari).
+- **Pengeluaran** — catat uang keluar toko (deterjen, listrik, gaji, sewa,
+  perawatan mesin, bensin, perlengkapan, lain-lain) berikut tanggal dan
+  keterangannya. Khusus owner.
+- **Laporan** — laba periode berjalan (omzet dikurangi pengeluaran) untuk
+  **hari ini, minggu ini, bulan ini, atau bulan lalu**, plus rekap per hari,
+  layanan terlaris, dan pengeluaran per kategori.
 - **Cadangan data** — ekspor & impor file `.json`.
 - **Offline** — setelah dibuka sekali, aplikasi tetap jalan tanpa internet.
 
@@ -178,6 +183,24 @@ Dua aturan yang dijaga:
 Logo tampil di menu samping (versi terang untuk latar navy), layar masuk, dan
 bagian atas struk. Owner tetap bisa menggantinya sendiri lewat **Pengaturan →
 Logo toko** tanpa mengubah kode.
+
+## Cara laba dihitung
+
+**Laba = omzet periode ini − pengeluaran periode ini.**
+
+Yang perlu dipahami: omzet memakai **nilai pesanan yang masuk** pada periode
+itu, termasuk yang belum dibayar. Jadi laba bukan berarti uang tunai yang sudah
+ada di laci. Karena itu Laporan juga menampilkan dua angka pendamping:
+
+- **Belum dibayar** — bagian omzet yang masih berupa piutang
+- **Uang yang benar-benar sudah diterima** pada periode itu
+
+Minggu dihitung Senin–Minggu, dan bulan mengikuti tanggal 1 sampai akhir bulan.
+Pengeluaran dicatat berdasarkan **tanggal uang keluar**, bukan tanggal
+pencatatan, sehingga nota kemarin yang baru sempat dicatat hari ini tetap masuk
+ke periode yang benar. Kalau pengeluaran melebihi omzet, kartu di Laporan dan
+Beranda berubah jadi **Rugi** berwarna merah penuh agar tidak mungkin terbaca
+keliru.
 
 ## Menyimpan data: yang perlu diketahui
 

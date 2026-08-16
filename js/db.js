@@ -36,6 +36,7 @@ window.DB = (function () {
     layanan: LAYANAN_AWAL,
     pengguna: penggunaAwal(),
     pesanan: [],
+    pengeluaran: [],
     nomorTerakhir: 0,
   };
 
@@ -189,6 +190,44 @@ window.DB = (function () {
     simpan();
   }
 
+  /* ---------- Pengeluaran ---------- */
+  const KATEGORI = [
+    'Deterjen & Pewangi',
+    'Listrik & Air',
+    'Gaji & Upah',
+    'Sewa Tempat',
+    'Perawatan Mesin',
+    'Antar-Jemput & Bensin',
+    'Perlengkapan',
+    'Lain-lain',
+  ];
+
+  const pengeluaran = () => state.pengeluaran;
+  const cariPengeluaran = (id) => state.pengeluaran.find((x) => x.id === id);
+
+  function simpanPengeluaran(data) {
+    const lama = data.id ? cariPengeluaran(data.id) : null;
+    const baru = {
+      ...(lama || { id: U.idBaru(), dicatat: new Date().toISOString() }),
+      tanggal: data.tanggal,                 // YYYY-MM-DD, tanggal uang keluar
+      kategori: data.kategori,
+      keterangan: (data.keterangan || '').trim(),
+      jumlah: Math.max(0, Number(data.jumlah) || 0),
+      oleh: data.oleh || lama?.oleh || '-',
+    };
+    if (lama) state.pengeluaran[state.pengeluaran.indexOf(lama)] = baru;
+    else state.pengeluaran.unshift(baru);
+    // Urut dari yang terbaru supaya daftar enak dibaca.
+    state.pengeluaran.sort((a, b) => (a.tanggal < b.tanggal ? 1 : a.tanggal > b.tanggal ? -1 : 0));
+    simpan();
+    return baru;
+  }
+
+  function hapusPengeluaran(id) {
+    state.pengeluaran = state.pengeluaran.filter((x) => x.id !== id);
+    simpan();
+  }
+
   /* ---------- Pelanggan (diturunkan dari riwayat pesanan) ---------- */
   function pelanggan() {
     const peta = new Map();
@@ -221,6 +260,8 @@ window.DB = (function () {
     if (!data || !Array.isArray(data.layanan) || !Array.isArray(data.pesanan)) {
       throw new Error('Format file cadangan tidak dikenali');
     }
+    // Cadangan dari versi sebelum fitur pengeluaran tetap bisa dipulihkan.
+    if (!Array.isArray(data.pengeluaran)) data.pengeluaran = [];
     state = { ...structuredClone(AWAL), ...data };
     simpan();
   }
@@ -231,7 +272,8 @@ window.DB = (function () {
   }
 
   return {
-    STATUS, LABEL_STATUS,
+    STATUS, LABEL_STATUS, KATEGORI,
+    pengeluaran, cariPengeluaran, simpanPengeluaran, hapusPengeluaran,
     layanan, layananAktif, cariLayanan, simpanLayanan, hapusLayanan,
     pengguna, cariPengguna, simpanPengguna, hapusPengguna,
     pesanan, cariPesanan, buatPesanan, ubahStatus, lunasi, hapusPesanan,

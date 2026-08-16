@@ -1,6 +1,6 @@
 /* Service worker: cache-first agar aplikasi tetap terbuka tanpa internet.
    Naikkan VERSI setiap kali ada perubahan file agar tablet mengambil versi baru. */
-const VERSI = 'kasir-laundry-v3';
+const VERSI = 'kasir-laundry-v4';
 const BERKAS = [
   './',
   './index.html',

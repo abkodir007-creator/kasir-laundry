@@ -10,6 +10,7 @@
     pesanan: Views.pesanan,
     pelanggan: Views.pelanggan,
     laporan: Views.laporan,
+    pengeluaran: Views.pengeluaran,
     layanan: Views.layanan,
     penggunaAkun: Views.penggunaAkun,
     pengaturan: Views.pengaturan,

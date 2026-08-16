@@ -98,6 +98,16 @@ window.Views = (function () {
     const belumLunas = semua.filter((p) => !p.lunas);
     const piutang = belumLunas.reduce((a, p) => a + (p.total - p.dibayar), 0);
 
+    // Laba bulan berjalan, memakai perhitungan yang sama persis dengan Laporan.
+    const bulan = rentangWaktu('bulan');
+    const dalamBulan = (iso) => {
+      const t = new Date(iso);
+      return t >= bulan.dari && t <= bulan.sampai;
+    };
+    const omzetBulan = semua.filter((p) => dalamBulan(p.dibuat)).reduce((a, p) => a + p.total, 0);
+    const keluarBulan = DB.pengeluaran().filter((x) => dalamBulan(x.tanggal + 'T12:00:00')).reduce((a, x) => a + x.jumlah, 0);
+    const labaBulan = omzetBulan - keluarBulan;
+
     // Tujuh hari terakhir, hari ini paling kanan.
     const HARI = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
     const tren = [];
@@ -158,6 +168,12 @@ window.Views = (function () {
         ${
           owner
             ? tile('Omzet hari ini', U.rupiah(omzetHariIni), `${pesananHariIni.length} pesanan masuk`, 'stat-hero') +
+              tile(
+                labaBulan < 0 ? 'Rugi bulan ini' : 'Laba bulan ini',
+                U.rupiah(Math.abs(labaBulan)),
+                `omzet ${U.rupiah(omzetBulan)} \u2212 keluar ${U.rupiah(keluarBulan)}`,
+                labaBulan < 0 ? 'stat-rugi' : ''
+              ) +
               tile('Belum dibayar', U.rupiah(piutang), `${belumLunas.length} nota`) +
               tile('Cucian belum diambil', belumAmbil.length, `${siapDiambil.length} sudah siap`) +
               tile('Lewat estimasi', terlambat.length, terlambat.length ? 'perlu ditindaklanjuti' : 'semua tepat waktu')
@@ -597,34 +613,73 @@ window.Views = (function () {
       </table></div></div>`;
   }
 
+  /* ============ Rentang waktu untuk laporan ============
+     Minggu dihitung Senin–Minggu, sesuai kebiasaan tutup buku mingguan. */
+  function rentangWaktu(jenis) {
+    const dari = new Date();
+    dari.setHours(0, 0, 0, 0);
+    const sampai = new Date();
+    sampai.setHours(23, 59, 59, 999);
+
+    if (jenis === 'minggu') {
+      const geser = (dari.getDay() + 6) % 7; // Senin = 0
+      dari.setDate(dari.getDate() - geser);
+    } else if (jenis === 'bulan') {
+      dari.setDate(1);
+    } else if (jenis === 'bulanLalu') {
+      dari.setDate(1);
+      dari.setMonth(dari.getMonth() - 1);
+      sampai.setDate(0); // hari terakhir bulan lalu
+      sampai.setHours(23, 59, 59, 999);
+    }
+    return { dari, sampai };
+  }
+
+  const LABEL_RENTANG = {
+    hari: 'Hari ini',
+    minggu: 'Minggu ini',
+    bulan: 'Bulan ini',
+    bulanLalu: 'Bulan lalu',
+  };
+
   /* ================= LAPORAN ================= */
   function laporan(el) {
-    let rentang = 7;
+    let jenis = 'bulan';
 
     el.innerHTML = `
       <div class="page-head">
         <div>
           <h1 class="page-title">Laporan</h1>
-          <p class="page-sub">Ringkasan omzet dan layanan terlaris.</p>
+          <p class="page-sub">Omzet dikurangi pengeluaran, jadi laba periode berjalan.</p>
         </div>
         <div class="seg" id="segRentang">
-          <button type="button" data-hari="1">Hari ini</button>
-          <button type="button" data-hari="7" class="is-active">7 hari</button>
-          <button type="button" data-hari="30">30 hari</button>
+          ${Object.entries(LABEL_RENTANG)
+            .map(([k, v]) => `<button type="button" data-jenis="${k}" class="${k === jenis ? 'is-active' : ''}">${v}</button>`)
+            .join('')}
         </div>
       </div>
       <div id="isiLaporan"></div>`;
 
     function gambar() {
-      const batas = new Date();
-      batas.setHours(0, 0, 0, 0);
-      batas.setDate(batas.getDate() - (rentang - 1));
-      const daftar = DB.pesanan().filter((p) => new Date(p.dibuat) >= batas);
+      const { dari, sampai } = rentangWaktu(jenis);
+      const dalamRentang = (iso) => {
+        const t = new Date(iso);
+        return t >= dari && t <= sampai;
+      };
+
+      const daftar = DB.pesanan().filter((p) => dalamRentang(p.dibuat));
+      const keluar = DB.pengeluaran().filter((x) => dalamRentang(x.tanggal + 'T12:00:00'));
 
       const omzet = daftar.reduce((a, p) => a + p.total, 0);
       const terbayar = daftar.reduce((a, p) => a + p.dibayar, 0);
       const piutang = omzet - terbayar;
+      const totalKeluar = keluar.reduce((a, x) => a + x.jumlah, 0);
+      const laba = omzet - totalKeluar;
       const belumAmbil = DB.pesanan().filter((p) => p.status !== 'diambil').length;
+
+      const perKategori = new Map();
+      for (const x of keluar) perKategori.set(x.kategori, (perKategori.get(x.kategori) || 0) + x.jumlah);
+      const kategoriUrut = [...perKategori.entries()].sort((a, b) => b[1] - a[1]);
 
       const perLayanan = new Map();
       for (const p of daftar) {
@@ -648,12 +703,35 @@ window.Views = (function () {
       const hari = [...perHari.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
 
       el.querySelector('#isiLaporan').innerHTML = `
+        <p class="muted" style="margin:-6px 0 12px">
+          ${esc(LABEL_RENTANG[jenis])}: ${U.tanggal(dari)} – ${U.tanggal(sampai)}
+        </p>
         <div class="stats">
-          <div class="stat"><div class="stat-label">Omzet</div><div class="stat-value">${U.rupiah(omzet)}</div></div>
-          <div class="stat"><div class="stat-label">Jumlah pesanan</div><div class="stat-value">${daftar.length}</div></div>
-          <div class="stat"><div class="stat-label">Belum dibayar</div><div class="stat-value">${U.rupiah(piutang)}</div></div>
-          <div class="stat"><div class="stat-label">Cucian belum diambil</div><div class="stat-value">${belumAmbil}</div></div>
+          <div class="stat ${laba < 0 ? 'stat-rugi' : 'stat-hero'}">
+            <div class="stat-label">${laba < 0 ? 'Rugi' : 'Laba'}</div>
+            <div class="stat-value">${U.rupiah(Math.abs(laba))}</div>
+            <div class="stat-note">omzet dikurangi pengeluaran</div>
+          </div>
+          <div class="stat"><div class="stat-label">Omzet</div><div class="stat-value">${U.rupiah(omzet)}</div>
+            <div class="stat-note">${daftar.length} pesanan</div></div>
+          <div class="stat"><div class="stat-label">Pengeluaran</div><div class="stat-value">${U.rupiah(totalKeluar)}</div>
+            <div class="stat-note">${keluar.length} catatan</div></div>
+          <div class="stat"><div class="stat-label">Belum dibayar</div><div class="stat-value">${U.rupiah(piutang)}</div>
+            <div class="stat-note">sudah ikut dihitung di omzet</div></div>
+          <div class="stat"><div class="stat-label">Cucian belum diambil</div><div class="stat-value">${belumAmbil}</div>
+            <div class="stat-note">seluruh periode</div></div>
         </div>
+
+        <div class="card card-pad" style="margin-bottom:16px">
+          <b>Cara angka ini dihitung</b>
+          <p class="muted" style="margin-bottom:0">
+            Laba = <b>omzet periode ini</b> − <b>pengeluaran periode ini</b>. Omzet memakai
+            nilai pesanan yang masuk pada periode ini, termasuk yang belum dibayar
+            (${U.rupiah(piutang)}), jadi angkanya bukan uang tunai yang sudah di laci.
+            Uang yang benar-benar sudah diterima pada periode ini: <b>${U.rupiah(terbayar)}</b>.
+          </p>
+        </div>
+
         <div class="row" style="flex-wrap:wrap; align-items:flex-start">
           <div class="card" style="min-width:280px">
             <div class="card-head">Per hari</div>
@@ -677,16 +755,171 @@ window.Views = (function () {
               }</tbody>
             </table></div>
           </div>
+
+          <div class="card" style="min-width:280px">
+            <div class="card-head">
+              <span>Pengeluaran per kategori</span>
+              <button class="btn btn-sm" id="btnKeLuar" type="button">Catat</button>
+            </div>
+            <div class="table-wrap"><table>
+              <thead><tr><th>Kategori</th><th class="right">Jumlah</th><th class="right">%</th></tr></thead>
+              <tbody>${
+                kategoriUrut.length
+                  ? kategoriUrut
+                      .map(
+                        ([nama, jml]) => `<tr><td>${esc(nama)}</td><td class="right">${U.rupiah(jml)}</td>
+                          <td class="right">${Math.round((jml / totalKeluar) * 100)}%</td></tr>`
+                      )
+                      .join('')
+                  : `<tr><td colspan="3"><p class="empty">Belum ada pengeluaran pada periode ini.</p></td></tr>`
+              }</tbody>
+            </table></div>
+          </div>
         </div>`;
+
+      el.querySelector('#btnKeLuar').addEventListener('click', () => {
+        location.hash = 'pengeluaran';
+      });
     }
 
     el.querySelector('#segRentang').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-hari]');
+      const b = e.target.closest('[data-jenis]');
       if (!b) return;
-      rentang = +b.dataset.hari;
+      jenis = b.dataset.jenis;
       el.querySelectorAll('#segRentang button').forEach((x) => x.classList.remove('is-active'));
       b.classList.add('is-active');
       gambar();
+    });
+
+    gambar();
+  }
+
+  /* ================= PENGELUARAN (khusus owner) ================= */
+  function pengeluaran(el) {
+    let jenis = 'bulan';
+
+    el.innerHTML = `
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Pengeluaran</h1>
+          <p class="page-sub">Semua uang keluar toko. Langsung terhitung sebagai pengurang laba di Laporan.</p>
+        </div>
+        <button class="btn btn-primary" id="btnTambahKeluar" type="button">+ Catat Pengeluaran</button>
+      </div>
+      <div class="filters">
+        <div class="seg" id="segPeriode" style="flex:1">
+          ${Object.entries(LABEL_RENTANG)
+            .map(([k, v]) => `<button type="button" data-jenis="${k}" class="${k === jenis ? 'is-active' : ''}">${v}</button>`)
+            .join('')}
+          <button type="button" data-jenis="semua">Semua</button>
+        </div>
+      </div>
+      <div class="stats" id="ringkasKeluar"></div>
+      <div class="card"><div class="table-wrap"><table>
+        <thead><tr><th>Tanggal</th><th>Kategori</th><th>Keterangan</th><th class="right">Jumlah</th><th class="right">Aksi</th></tr></thead>
+        <tbody id="barisKeluar"></tbody>
+      </table></div></div>`;
+
+    const tbody = el.querySelector('#barisKeluar');
+
+    function terpilih() {
+      if (jenis === 'semua') return DB.pengeluaran();
+      const { dari, sampai } = rentangWaktu(jenis);
+      return DB.pengeluaran().filter((x) => {
+        const t = new Date(x.tanggal + 'T12:00:00');
+        return t >= dari && t <= sampai;
+      });
+    }
+
+    function gambar() {
+      const daftar = terpilih();
+      const total = daftar.reduce((a, x) => a + x.jumlah, 0);
+
+      el.querySelector('#ringkasKeluar').innerHTML = `
+        <div class="stat">
+          <div class="stat-label">Total ${esc(jenis === 'semua' ? 'seluruhnya' : LABEL_RENTANG[jenis].toLowerCase())}</div>
+          <div class="stat-value">${U.rupiah(total)}</div>
+          <div class="stat-note">${daftar.length} catatan</div>
+        </div>`;
+
+      tbody.innerHTML = daftar.length
+        ? daftar
+            .map(
+              (x) => `<tr>
+                <td>${U.tanggal(x.tanggal + 'T12:00:00')}</td>
+                <td>${esc(x.kategori)}</td>
+                <td>${esc(x.keterangan || '-')}
+                  ${x.oleh && x.oleh !== '-' ? `<div class="muted" style="font-size:12px">dicatat ${esc(x.oleh)}</div>` : ''}</td>
+                <td class="right">${U.rupiah(x.jumlah)}</td>
+                <td class="right" style="white-space:nowrap">
+                  <button class="btn btn-sm" data-ubah="${x.id}">Ubah</button>
+                  <button class="btn btn-sm btn-danger" data-hapus="${x.id}">Hapus</button>
+                </td>
+              </tr>`
+            )
+            .join('')
+        : `<tr><td colspan="5"><p class="empty">Belum ada pengeluaran pada periode ini.</p></td></tr>`;
+    }
+
+    function formKeluar(x) {
+      formModal(
+        x ? 'Ubah Pengeluaran' : 'Catat Pengeluaran',
+        `<div class="field"><label>Tanggal</label>
+           <input class="input" name="tanggal" type="date" value="${esc(x?.tanggal || U.hariIni())}"></div>
+         <div class="field"><label>Kategori</label>
+           <select class="input" name="kategori">
+             ${DB.KATEGORI.map((k) => `<option value="${esc(k)}" ${x?.kategori === k ? 'selected' : ''}>${esc(k)}</option>`).join('')}
+           </select></div>
+         <div class="field"><label>Keterangan</label>
+           <input class="input" name="keterangan" value="${esc(x?.keterangan || '')}" placeholder="Contoh: beli deterjen 5 liter"></div>
+         <div class="field"><label>Jumlah (Rp)</label>
+           <input class="input" name="jumlah" type="number" inputmode="numeric" min="0" step="500" value="${x?.jumlah ?? ''}"></div>`,
+        (v) => {
+          const jumlah = Number(v.jumlah) || 0;
+          if (!v.tanggal) return U.toast('Tanggal wajib diisi');
+          if (jumlah <= 0) return U.toast('Jumlah harus lebih dari nol');
+          DB.simpanPengeluaran({
+            id: x?.id,
+            tanggal: v.tanggal,
+            kategori: v.kategori,
+            keterangan: v.keterangan,
+            jumlah,
+            oleh: Auth.aktif()?.nama,
+          });
+          gambar();
+          U.toast('Pengeluaran tersimpan');
+        }
+      );
+    }
+
+    el.querySelector('#btnTambahKeluar').addEventListener('click', () => formKeluar(null));
+
+    el.querySelector('#segPeriode').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-jenis]');
+      if (!b) return;
+      jenis = b.dataset.jenis;
+      el.querySelectorAll('#segPeriode button').forEach((y) => y.classList.remove('is-active'));
+      b.classList.add('is-active');
+      gambar();
+    });
+
+    tbody.addEventListener('click', async (e) => {
+      const ubah = e.target.closest('[data-ubah]');
+      const hapus = e.target.closest('[data-hapus]');
+      if (ubah) formKeluar(DB.cariPengeluaran(ubah.dataset.ubah));
+      if (hapus) {
+        const x = DB.cariPengeluaran(hapus.dataset.hapus);
+        const ya = await U.konfirmasi(
+          'Hapus pengeluaran?',
+          `${x.kategori} ${U.rupiah(x.jumlah)} tanggal ${U.tanggal(x.tanggal + 'T12:00:00')} akan dihapus, dan laba ikut berubah.`,
+          'Hapus'
+        );
+        if (ya) {
+          DB.hapusPengeluaran(x.id);
+          gambar();
+          U.toast('Pengeluaran dihapus');
+        }
+      }
     });
 
     gambar();
@@ -1016,5 +1249,5 @@ window.Views = (function () {
     });
   }
 
-  return { beranda, kasir, pesanan, pelanggan, laporan, layanan, penggunaAkun, pengaturan, ingatkanPinBawaan };
+  return { beranda, kasir, pesanan, pelanggan, laporan, pengeluaran, layanan, penggunaAkun, pengaturan, ingatkanPinBawaan };
 })();

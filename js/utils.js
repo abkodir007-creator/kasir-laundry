@@ -44,6 +44,74 @@ window.U = (function () {
     return d;
   };
 
+  /** Urai daftar kontak jadi [{nama, hp}].
+
+      Sengaja longgar karena daftar pelanggan bisa datang dari mana saja:
+      ekspor kontak HP (CSV berjudul), salinan dari Excel (dipisah tab),
+      titik koma ala Excel Indonesia, sampai ketikan bebas "Ibu Sari 08123...".
+      Baris yang tidak mengandung nama maupun nomor dilewati, bukan bikin gagal. */
+  const uraiKontak = (teks) => {
+    const barisan = String(teks || '').split(/\r?\n/).map((b) => b.trim()).filter(Boolean);
+    if (!barisan.length) return { data: [], dilewati: 0 };
+
+    const pisah = (b) => {
+      const sep = b.includes('\t') ? '\t' : b.includes(';') ? ';' : b.includes(',') ? ',' : null;
+      if (!sep) return [b];
+      return b.split(sep).map((x) => x.trim().replace(/^"(.*)"$/, '$1').trim());
+    };
+
+    // Deteksi baris judul supaya kolom tidak tertukar.
+    let kNama = 0;
+    let kHp = 1;
+    let mulai = 0;
+    const kepala = pisah(barisan[0]).map((x) => x.toLowerCase());
+    if (kepala.length > 1) {
+      const iNama = kepala.findIndex((x) => /nama|name|pelanggan|customer|contact/.test(x));
+      const iHp = kepala.findIndex((x) => /hp|telp|tlp|phone|wa|whatsapp|nomor|no\b|number/.test(x));
+      if (iNama >= 0 || iHp >= 0) {
+        kNama = iNama >= 0 ? iNama : iHp === 0 ? 1 : 0;
+        kHp = iHp >= 0 ? iHp : kNama === 0 ? 1 : 0;
+        mulai = 1;
+      }
+    }
+
+    const adaAngka = (s) => (String(s).match(/\d/g) || []).length >= 8;
+    const data = [];
+    let dilewati = 0;
+
+    for (let i = mulai; i < barisan.length; i++) {
+      const kolom = pisah(barisan[i]);
+      let nama = '';
+      let hp = '';
+
+      if (kolom.length > 1) {
+        nama = kolom[kNama] || '';
+        hp = kolom[kHp] || '';
+        // Kalau ternyata terbalik, tukar berdasarkan mana yang berisi angka.
+        if (!adaAngka(hp) && adaAngka(nama)) [nama, hp] = [hp, nama];
+      } else {
+        // Satu kolom: cari nomornya di dalam baris, sisanya jadi nama.
+        const cocok = kolom[0].match(/(\+?\d[\d\s().-]{7,}\d)/);
+        if (cocok) {
+          hp = cocok[1];
+          nama = kolom[0].replace(cocok[1], '').replace(/[-–:,|]+\s*$/, '').trim();
+        } else {
+          nama = kolom[0];
+        }
+      }
+
+      nama = nama.trim();
+      hp = adaAngka(hp) ? hp.trim() : '';
+      if (!nama && !hp) {
+        dilewati += 1;
+        continue;
+      }
+      data.push({ nama: nama || 'Tanpa Nama', hp });
+    }
+
+    return { data, dilewati };
+  };
+
   /** Baca berkas gambar lalu perkecil ke sisi terpanjang `maks` piksel.
       Logo disimpan di dalam localStorage, jadi ukurannya harus ditekan. */
   const bacaGambarKecil = (file, maks = 320) =>
@@ -91,5 +159,5 @@ window.U = (function () {
       modal.addEventListener('close', () => resolve(modal.returnValue === 'ya'), { once: true });
     });
 
-  return { rupiah, angka, tanggal, jam, tanggalJam, hariKunci, hariIni, tambahHari, idBaru, esc, waNomor, bacaGambarKecil, toast, konfirmasi };
+  return { rupiah, angka, tanggal, jam, tanggalJam, hariKunci, hariIni, tambahHari, idBaru, esc, waNomor, uraiKontak, bacaGambarKecil, toast, konfirmasi };
 })();

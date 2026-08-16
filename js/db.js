@@ -37,6 +37,7 @@ window.DB = (function () {
     pengguna: penggunaAwal(),
     pesanan: [],
     pengeluaran: [],
+    pelanggan: [],
     nomorTerakhir: 0,
   };
 
@@ -228,21 +229,88 @@ window.DB = (function () {
     simpan();
   }
 
-  /* ---------- Pelanggan (diturunkan dari riwayat pesanan) ---------- */
+  /* ---------- Pelanggan ----------
+     Dua sumber digabung: buku pelanggan yang disimpan sendiri (hasil impor
+     atau input manual) dan pelanggan yang muncul dari riwayat pesanan.
+     Kuncinya nomor HP yang sudah dinormalkan; kalau tidak ada HP, pakai nama. */
+  const kunciPelanggan = (nama, hp) => U.waNomor(hp) || `nama:${String(nama || '').trim().toLowerCase()}`;
+
+  const bukuPelanggan = () => state.pelanggan;
+
   function pelanggan() {
     const peta = new Map();
+
+    for (const c of state.pelanggan) {
+      peta.set(kunciPelanggan(c.nama, c.hp), {
+        id: c.id, nama: c.nama, hp: c.hp, catatan: c.catatan || '',
+        jumlah: 0, belanja: 0, terakhir: null, tersimpan: true,
+      });
+    }
+
     for (const p of state.pesanan) {
-      const kunci = (p.pelanggan.hp || p.pelanggan.nama).toLowerCase();
-      const ada = peta.get(kunci) || { nama: p.pelanggan.nama, hp: p.pelanggan.hp, jumlah: 0, belanja: 0, terakhir: p.dibuat };
+      const k = kunciPelanggan(p.pelanggan.nama, p.pelanggan.hp);
+      const ada = peta.get(k) || {
+        nama: p.pelanggan.nama, hp: p.pelanggan.hp, catatan: '',
+        jumlah: 0, belanja: 0, terakhir: p.dibuat, tersimpan: false,
+      };
       ada.jumlah += 1;
       ada.belanja += p.total;
-      if (new Date(p.dibuat) > new Date(ada.terakhir)) {
+      if (!ada.terakhir || new Date(p.dibuat) > new Date(ada.terakhir)) {
         ada.terakhir = p.dibuat;
-        ada.nama = p.pelanggan.nama;
+        // Nama pada nota terbaru dianggap paling mutakhir, kecuali sudah ada di buku.
+        if (!ada.tersimpan) ada.nama = p.pelanggan.nama;
+        if (!ada.hp) ada.hp = p.pelanggan.hp;
       }
-      peta.set(kunci, ada);
+      peta.set(k, ada);
     }
-    return [...peta.values()].sort((a, b) => b.belanja - a.belanja);
+
+    return [...peta.values()].sort((a, b) => b.belanja - a.belanja || a.nama.localeCompare(b.nama));
+  }
+
+  function simpanPelanggan(data) {
+    const lama = data.id ? state.pelanggan.find((c) => c.id === data.id) : null;
+    const baru = {
+      ...(lama || { id: U.idBaru(), dibuat: new Date().toISOString() }),
+      nama: (data.nama || '').trim(),
+      hp: (data.hp || '').trim(),
+      catatan: (data.catatan || '').trim(),
+    };
+    if (lama) state.pelanggan[state.pelanggan.indexOf(lama)] = baru;
+    else state.pelanggan.push(baru);
+    simpan();
+    return baru;
+  }
+
+  function hapusPelanggan(id) {
+    state.pelanggan = state.pelanggan.filter((c) => c.id !== id);
+    simpan();
+  }
+
+  /** Masukkan hasil uraian daftar kontak. Nomor yang sudah ada dilewati. */
+  function imporPelanggan(daftar) {
+    const punya = new Set(state.pelanggan.map((c) => kunciPelanggan(c.nama, c.hp)));
+    for (const p of state.pesanan) punya.add(kunciPelanggan(p.pelanggan.nama, p.pelanggan.hp));
+
+    let masuk = 0;
+    let dilewati = 0;
+    for (const c of daftar) {
+      const k = kunciPelanggan(c.nama, c.hp);
+      if (punya.has(k)) {
+        dilewati += 1;
+        continue;
+      }
+      punya.add(k);
+      state.pelanggan.push({
+        id: U.idBaru(),
+        nama: c.nama,
+        hp: c.hp,
+        catatan: c.catatan || '',
+        dibuat: new Date().toISOString(),
+      });
+      masuk += 1;
+    }
+    simpan();
+    return { masuk, dilewati };
   }
 
   /* ---------- Pengaturan & cadangan ---------- */
@@ -262,6 +330,7 @@ window.DB = (function () {
     }
     // Cadangan dari versi sebelum fitur pengeluaran tetap bisa dipulihkan.
     if (!Array.isArray(data.pengeluaran)) data.pengeluaran = [];
+    if (!Array.isArray(data.pelanggan)) data.pelanggan = [];
     state = { ...structuredClone(AWAL), ...data };
     simpan();
   }
@@ -277,6 +346,6 @@ window.DB = (function () {
     layanan, layananAktif, cariLayanan, simpanLayanan, hapusLayanan,
     pengguna, cariPengguna, simpanPengguna, hapusPengguna,
     pesanan, cariPesanan, buatPesanan, ubahStatus, lunasi, hapusPesanan,
-    pelanggan, toko, simpanToko, ekspor, impor, resetSemua,
+    pelanggan, bukuPelanggan, simpanPelanggan, hapusPelanggan, imporPelanggan, toko, simpanToko, ekspor, impor, resetSemua,
   };
 })();

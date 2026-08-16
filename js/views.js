@@ -237,11 +237,13 @@ window.Views = (function () {
           <div class="card-pad" style="border-bottom:1px solid var(--border)">
             <div class="field">
               <label for="inpNama">Nama pelanggan</label>
-              <input class="input" id="inpNama" placeholder="Contoh: Ibu Sari">
+              <input class="input" id="inpNama" list="dlNama" autocomplete="off" placeholder="Ketik nama, pelanggan lama muncul sendiri">
+              <datalist id="dlNama"></datalist>
             </div>
             <div class="field" style="margin-bottom:0">
               <label for="inpHp">No. WhatsApp (opsional)</label>
-              <input class="input" id="inpHp" type="tel" inputmode="numeric" placeholder="08xxxxxxxxxx">
+              <input class="input" id="inpHp" type="tel" inputmode="numeric" list="dlHp" autocomplete="off" placeholder="08xxxxxxxxxx">
+              <datalist id="dlHp"></datalist>
             </div>
           </div>
           <div class="cart-items" id="cartItems"></div>
@@ -275,6 +277,35 @@ window.Views = (function () {
       </div>`;
 
     const grid = el.querySelector('#svcGrid');
+
+    /* Pelanggan lama bisa dipanggil tanpa mengetik ulang: nama dan nomor saling
+       melengkapi. Inilah yang membuat impor daftar pelanggan terasa gunanya. */
+    (function siapkanPelanggan() {
+      const buku = DB.pelanggan().slice(0, 500);
+      const inpNama = el.querySelector('#inpNama');
+      const inpHp = el.querySelector('#inpHp');
+
+      el.querySelector('#dlNama').innerHTML = buku
+        .filter((c) => c.nama)
+        .map((c) => `<option value="${esc(c.nama)}">${esc(c.hp || '')}</option>`)
+        .join('');
+      el.querySelector('#dlHp').innerHTML = buku
+        .filter((c) => c.hp)
+        .map((c) => `<option value="${esc(c.hp)}">${esc(c.nama)}</option>`)
+        .join('');
+
+      const cocokNama = (v) => buku.find((c) => c.nama.toLowerCase() === v.trim().toLowerCase());
+      const cocokHp = (v) => buku.find((c) => c.hp && U.waNomor(c.hp) === U.waNomor(v));
+
+      inpNama.addEventListener('change', () => {
+        const c = cocokNama(inpNama.value);
+        if (c?.hp && !inpHp.value.trim()) inpHp.value = c.hp;
+      });
+      inpHp.addEventListener('change', () => {
+        const c = cocokHp(inpHp.value);
+        if (c?.nama && !inpNama.value.trim()) inpNama.value = c.nama;
+      });
+    })();
 
     function gambarLayanan() {
       const q = pos.cari.toLowerCase();
@@ -583,34 +614,192 @@ window.Views = (function () {
 
   /* ================= PELANGGAN ================= */
   function pelanggan(el) {
-    const daftar = DB.pelanggan();
+    let cari = '';
+
     el.innerHTML = `
       <div class="page-head">
         <div>
           <h1 class="page-title">Pelanggan</h1>
-          <p class="page-sub">Otomatis terkumpul dari riwayat pesanan.</p>
+          <p class="page-sub">Gabungan buku pelanggan dan nama yang muncul dari riwayat pesanan.</p>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap">
+          ${Auth.isOwner() ? '<button class="btn" id="btnImpor" type="button">⬆️ Impor Daftar</button>' : ''}
+          <button class="btn btn-primary" id="btnTambahPel" type="button">+ Tambah</button>
         </div>
       </div>
+      <div class="filters">
+        <input class="input" id="cariPelanggan" type="search" placeholder="Cari nama atau nomor…">
+      </div>
+      <div class="stats" id="ringkasPel"></div>
       <div class="card"><div class="table-wrap"><table>
-        <thead><tr><th>Nama</th><th>WhatsApp</th><th>Pesanan</th><th>Total Belanja</th><th>Terakhir</th></tr></thead>
-        <tbody>
-          ${
-            daftar.length
-              ? daftar
-                  .map(
-                    (c) => `<tr>
-                      <td><b>${esc(c.nama)}</b></td>
-                      <td>${c.hp ? `<a href="https://wa.me/${U.waNomor(c.hp)}" target="_blank" rel="noopener">${esc(c.hp)}</a>` : '-'}</td>
-                      <td>${c.jumlah}×</td>
-                      <td>${U.rupiah(c.belanja)}</td>
-                      <td>${U.tanggal(c.terakhir)}</td>
-                    </tr>`
-                  )
-                  .join('')
-              : `<tr><td colspan="5"><p class="empty">Belum ada pelanggan.</p></td></tr>`
-          }
-        </tbody>
+        <thead><tr><th>Nama</th><th>WhatsApp</th><th>Pesanan</th><th>Total Belanja</th><th>Terakhir</th><th class="right">Aksi</th></tr></thead>
+        <tbody id="barisPelanggan"></tbody>
       </table></div></div>`;
+
+    const tbody = el.querySelector('#barisPelanggan');
+
+    function gambar() {
+      const semua = DB.pelanggan();
+      const q = cari.toLowerCase().trim();
+      const daftar = !q
+        ? semua
+        : semua.filter((c) => c.nama.toLowerCase().includes(q) || U.waNomor(c.hp).includes(U.waNomor(q) || q));
+
+      const pernahPesan = semua.filter((c) => c.jumlah > 0).length;
+      el.querySelector('#ringkasPel').innerHTML = `
+        <div class="stat"><div class="stat-label">Total pelanggan</div><div class="stat-value">${semua.length}</div>
+          <div class="stat-note">${pernahPesan} pernah bertransaksi</div></div>
+        <div class="stat"><div class="stat-label">Punya nomor WhatsApp</div><div class="stat-value">${semua.filter((c) => c.hp).length}</div>
+          <div class="stat-note">bisa dikirimi struk</div></div>`;
+
+      tbody.innerHTML = daftar.length
+        ? daftar
+            .map(
+              (c) => `<tr>
+                <td><b>${esc(c.nama)}</b>
+                  ${c.jumlah === 0 ? '<span class="pill pill-muted" style="margin-left:6px">Belum pernah</span>' : ''}</td>
+                <td>${c.hp ? `<a href="https://wa.me/${U.waNomor(c.hp)}" target="_blank" rel="noopener">${esc(c.hp)}</a>` : '-'}</td>
+                <td>${c.jumlah}×</td>
+                <td>${U.rupiah(c.belanja)}</td>
+                <td>${c.terakhir ? U.tanggal(c.terakhir) : '-'}</td>
+                <td class="right" style="white-space:nowrap">
+                  ${
+                    c.id
+                      ? `<button class="btn btn-sm" data-ubah="${c.id}">Ubah</button>
+                         <button class="btn btn-sm btn-danger" data-hapus="${c.id}">Hapus</button>`
+                      : '<span class="muted" style="font-size:12px">dari riwayat</span>'
+                  }
+                </td>
+              </tr>`
+            )
+            .join('')
+        : `<tr><td colspan="6"><p class="empty">${q ? 'Tidak ada yang cocok.' : 'Belum ada pelanggan.'}</p></td></tr>`;
+    }
+
+    function formPelanggan(c) {
+      formModal(
+        c ? 'Ubah Pelanggan' : 'Tambah Pelanggan',
+        `<div class="field"><label>Nama</label>
+           <input class="input" name="nama" value="${esc(c?.nama || '')}" placeholder="Contoh: Ibu Sari"></div>
+         <div class="field"><label>No. WhatsApp</label>
+           <input class="input" name="hp" type="tel" inputmode="numeric" value="${esc(c?.hp || '')}" placeholder="08xxxxxxxxxx"></div>
+         <div class="field"><label>Catatan (opsional)</label>
+           <input class="input" name="catatan" value="${esc(c?.catatan || '')}" placeholder="Contoh: langganan antar-jemput"></div>`,
+        (v) => {
+          if (!v.nama.trim() && !v.hp.trim()) return U.toast('Isi minimal nama atau nomor');
+          DB.simpanPelanggan({ id: c?.id, nama: v.nama.trim() || 'Tanpa Nama', hp: v.hp, catatan: v.catatan });
+          gambar();
+          U.toast('Pelanggan tersimpan');
+        }
+      );
+    }
+
+    /* ---- Impor daftar pelanggan ---- */
+    function formImpor() {
+      const modal = document.getElementById('modal');
+      const inner = document.getElementById('modalInner');
+      inner.innerHTML = `
+        <h3>Impor Daftar Pelanggan</h3>
+        <p class="muted" style="margin-top:-6px">
+          Tempel dari Excel/WhatsApp, atau pilih berkas CSV hasil ekspor kontak.
+          Satu baris satu pelanggan. Nomor yang sudah ada otomatis dilewati.
+        </p>
+        <div class="field">
+          <label class="btn btn-sm btn-block" for="fileKontak">📄 Pilih berkas CSV / TXT</label>
+          <input type="file" id="fileKontak" accept=".csv,.txt,text/csv,text/plain" hidden>
+        </div>
+        <div class="field">
+          <label for="teksKontak">Atau tempel di sini</label>
+          <textarea class="input" id="teksKontak" style="min-height:150px; font-family:ui-monospace, monospace; font-size:13px"
+            placeholder="Nama,No HP&#10;Ibu Sari,081234567890&#10;Pak Budi,0813-1111-2222&#10;Mbak Ani 085700001111"></textarea>
+        </div>
+        <div id="pratinjauImpor"></div>
+        <div class="modal-actions">
+          <button type="submit" class="btn" value="batal">Batal</button>
+          <button type="button" class="btn btn-primary" id="btnJalankanImpor" disabled>Impor</button>
+        </div>`;
+
+      const area = inner.querySelector('#teksKontak');
+      const pratinjau = inner.querySelector('#pratinjauImpor');
+      const tombol = inner.querySelector('#btnJalankanImpor');
+      let hasil = [];
+
+      function periksa() {
+        const { data, dilewati } = U.uraiKontak(area.value);
+        hasil = data;
+        tombol.disabled = data.length === 0;
+        if (!area.value.trim()) {
+          pratinjau.innerHTML = '';
+          return;
+        }
+        const contoh = data
+          .slice(0, 4)
+          .map((c) => `<tr><td>${esc(c.nama)}</td><td class="right">${esc(c.hp || '—')}</td></tr>`)
+          .join('');
+        pratinjau.innerHTML = `
+          <div class="card card-pad" style="background:var(--surface-2)">
+            <b>${data.length} pelanggan terbaca</b>${dilewati ? ` <span class="muted">(${dilewati} baris dilewati)</span>` : ''}
+            ${
+              data.length
+                ? `<div class="table-wrap mt"><table><tbody>${contoh}</tbody></table></div>
+                   ${data.length > 4 ? `<p class="muted" style="margin:6px 0 0">…dan ${data.length - 4} lainnya</p>` : ''}
+                   <p class="muted" style="margin:6px 0 0">Periksa dulu: kalau nama dan nomor tertukar, perbaiki teksnya lalu tempel ulang.</p>`
+                : '<p class="muted" style="margin:6px 0 0">Belum ada baris yang bisa dibaca.</p>'
+            }
+          </div>`;
+      }
+
+      area.addEventListener('input', periksa);
+
+      inner.querySelector('#fileKontak').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        area.value = await file.text();
+        periksa();
+      });
+
+      tombol.addEventListener('click', () => {
+        const { masuk, dilewati } = DB.imporPelanggan(hasil);
+        modal.close();
+        gambar();
+        U.toast(`${masuk} pelanggan masuk${dilewati ? `, ${dilewati} dilewati karena sudah ada` : ''}`);
+      });
+
+      modal.returnValue = 'batal';
+      modal.showModal();
+    }
+
+    el.querySelector('#btnTambahPel').addEventListener('click', () => formPelanggan(null));
+    el.querySelector('#btnImpor')?.addEventListener('click', formImpor);
+
+    el.querySelector('#cariPelanggan').addEventListener('input', (e) => {
+      cari = e.target.value;
+      gambar();
+    });
+
+    tbody.addEventListener('click', async (e) => {
+      const ubah = e.target.closest('[data-ubah]');
+      const hapus = e.target.closest('[data-hapus]');
+      if (ubah) {
+        const c = DB.bukuPelanggan().find((x) => x.id === ubah.dataset.ubah);
+        formPelanggan(c);
+      }
+      if (hapus) {
+        const c = DB.bukuPelanggan().find((x) => x.id === hapus.dataset.hapus);
+        const ya = await U.konfirmasi(
+          'Hapus pelanggan?',
+          `${c.nama} dihapus dari buku pelanggan. Riwayat pesanannya tidak ikut terhapus.`,
+          'Hapus'
+        );
+        if (ya) {
+          DB.hapusPelanggan(c.id);
+          gambar();
+          U.toast('Pelanggan dihapus');
+        }
+      }
+    });
+
+    gambar();
   }
 
   /* ============ Rentang waktu untuk laporan ============
@@ -674,7 +863,8 @@ window.Views = (function () {
       const terbayar = daftar.reduce((a, p) => a + p.dibayar, 0);
       const piutang = omzet - terbayar;
       const totalKeluar = keluar.reduce((a, x) => a + x.jumlah, 0);
-      const laba = omzet - totalKeluar;
+      const laba = omzet - totalKeluar;                 // laba bersih: semua pesanan dihitung
+      const labaKotor = terbayar - totalKeluar;         // laba kotor: piutang dikeluarkan dulu
       const belumAmbil = DB.pesanan().filter((p) => p.status !== 'diambil').length;
 
       const perKategori = new Map();
@@ -708,27 +898,42 @@ window.Views = (function () {
         </p>
         <div class="stats">
           <div class="stat ${laba < 0 ? 'stat-rugi' : 'stat-hero'}">
-            <div class="stat-label">${laba < 0 ? 'Rugi' : 'Laba'}</div>
+            <div class="stat-label">${laba < 0 ? 'Rugi bersih' : 'Laba bersih'}</div>
             <div class="stat-value">${U.rupiah(Math.abs(laba))}</div>
-            <div class="stat-note">omzet dikurangi pengeluaran</div>
+            <div class="stat-note">omzet − pengeluaran</div>
+          </div>
+          <div class="stat ${labaKotor < 0 ? 'stat-rugi' : ''}">
+            <div class="stat-label">${labaKotor < 0 ? 'Rugi kotor' : 'Laba kotor'}</div>
+            <div class="stat-value">${U.rupiah(Math.abs(labaKotor))}</div>
+            <div class="stat-note">setelah dikurangi piutang</div>
           </div>
           <div class="stat"><div class="stat-label">Omzet</div><div class="stat-value">${U.rupiah(omzet)}</div>
             <div class="stat-note">${daftar.length} pesanan</div></div>
           <div class="stat"><div class="stat-label">Pengeluaran</div><div class="stat-value">${U.rupiah(totalKeluar)}</div>
             <div class="stat-note">${keluar.length} catatan</div></div>
           <div class="stat"><div class="stat-label">Belum dibayar</div><div class="stat-value">${U.rupiah(piutang)}</div>
-            <div class="stat-note">sudah ikut dihitung di omzet</div></div>
+            <div class="stat-note">piutang periode ini</div></div>
           <div class="stat"><div class="stat-label">Cucian belum diambil</div><div class="stat-value">${belumAmbil}</div>
             <div class="stat-note">seluruh periode</div></div>
         </div>
 
         <div class="card card-pad" style="margin-bottom:16px">
-          <b>Cara angka ini dihitung</b>
+          <b>Bedanya laba bersih dan laba kotor di sini</b>
+          <div class="table-wrap mt"><table>
+            <tbody>
+              <tr><td><b>Laba bersih</b><div class="muted" style="font-size:12px">seluruh pesanan dihitung, termasuk yang belum dibayar</div></td>
+                  <td class="right">${U.rupiah(omzet)} − ${U.rupiah(totalKeluar)} = <b>${U.rupiah(laba)}</b></td></tr>
+              <tr><td><b>Laba kotor</b><div class="muted" style="font-size:12px">hanya uang yang sudah benar-benar diterima</div></td>
+                  <td class="right">${U.rupiah(terbayar)} − ${U.rupiah(totalKeluar)} = <b>${U.rupiah(labaKotor)}</b></td></tr>
+              <tr><td>Selisihnya</td>
+                  <td class="right">piutang ${U.rupiah(piutang)}</td></tr>
+            </tbody>
+          </table></div>
           <p class="muted" style="margin-bottom:0">
-            Laba = <b>omzet periode ini</b> − <b>pengeluaran periode ini</b>. Omzet memakai
-            nilai pesanan yang masuk pada periode ini, termasuk yang belum dibayar
-            (${U.rupiah(piutang)}), jadi angkanya bukan uang tunai yang sudah di laci.
-            Uang yang benar-benar sudah diterima pada periode ini: <b>${U.rupiah(terbayar)}</b>.
+            Laba bersih memakai nilai semua pesanan yang masuk periode ini, jadi angkanya
+            belum tentu ada di laci. Laba kotor memakai uang yang sudah diterima, jadi
+            paling dekat dengan kas nyata. Selisih keduanya adalah piutang yang masih
+            ditagih. Kalau semua pelanggan sudah bayar, kedua angka ini sama.
           </p>
         </div>
 

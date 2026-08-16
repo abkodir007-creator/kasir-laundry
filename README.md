@@ -125,7 +125,10 @@ shift; aplikasi tidak mengunci sendiri, dan sesi berakhir saat aplikasi ditutup.
   pencarian nota/nama/HP. Pesanan tidak bisa ditandai selesai selama belum lunas.
 - **Struk** — cetak (format 80 mm, cocok printer thermal atau simpan PDF) dan
   kirim ke WhatsApp pelanggan dengan sekali ketuk.
-- **Pelanggan** — otomatis terkumpul dari riwayat, lengkap dengan total belanja.
+- **Pelanggan** — buku pelanggan yang bisa **diimpor sekaligus** dari CSV,
+  salinan Excel, atau ketikan bebas; digabung otomatis dengan nama yang muncul
+  dari riwayat pesanan. Di halaman Kasir, nama dan nomor saling melengkapi
+  sendiri sehingga pelanggan lama tidak perlu diketik ulang.
 - **Pengeluaran** — catat uang keluar toko (deterjen, listrik, gaji, sewa,
   perawatan mesin, bensin, perlengkapan, lain-lain) berikut tanggal dan
   keterangannya. Khusus owner.
@@ -186,14 +189,21 @@ Logo toko** tanpa mengubah kode.
 
 ## Cara laba dihitung
 
-**Laba = omzet periode ini − pengeluaran periode ini.**
+Laporan menampilkan dua angka, dan bedanya hanya pada piutang:
 
-Yang perlu dipahami: omzet memakai **nilai pesanan yang masuk** pada periode
-itu, termasuk yang belum dibayar. Jadi laba bukan berarti uang tunai yang sudah
-ada di laci. Karena itu Laporan juga menampilkan dua angka pendamping:
+| Angka | Rumus | Artinya |
+|---|---|---|
+| **Laba bersih** | omzet − pengeluaran | Semua pesanan dihitung, termasuk yang belum dibayar |
+| **Laba kotor** | uang diterima − pengeluaran | Hanya uang yang benar-benar sudah masuk |
 
-- **Belum dibayar** — bagian omzet yang masih berupa piutang
-- **Uang yang benar-benar sudah diterima** pada periode itu
+Selisih keduanya persis sebesar piutang. Kalau semua pelanggan sudah bayar,
+kedua angka itu sama.
+
+> **Catatan istilah.** Penamaan ini mengikuti permintaan pemilik toko. Dalam
+> akuntansi baku, *laba kotor* berarti pendapatan dikurangi harga pokok
+> penjualan, dan *laba bersih* adalah yang sudah dikurangi seluruh beban —
+> bukan soal piutang. Kalau angka ini dipakai untuk laporan pajak atau
+> dibawa ke akuntan, sebutkan rumusnya, jangan hanya namanya.
 
 Minggu dihitung Senin–Minggu, dan bulan mengikuti tanggal 1 sampai akhir bulan.
 Pengeluaran dicatat berdasarkan **tanggal uang keluar**, bukan tanggal

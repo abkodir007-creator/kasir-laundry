@@ -225,6 +225,7 @@ window.Views = (function () {
         total,
         dibayar: Math.min(bayar, total),
         diterima: bayar,
+        kasir: Auth.aktif()?.nama,
         metode: el.querySelector('#segMetode .is-active').dataset.metode,
         catatan: el.querySelector('#inpCatatan').value,
       });
@@ -353,6 +354,7 @@ window.Views = (function () {
       <p class="muted" style="margin-top:-6px">
         ${esc(p.pelanggan.nama)} • ${esc(p.pelanggan.hp || 'tanpa HP')}<br>
         Masuk ${U.tanggalJam(p.dibuat)} • Estimasi ${U.tanggal(p.estimasiSelesai)}
+        ${p.kasir && p.kasir !== '-' ? `<br>Diterima oleh ${esc(p.kasir)}` : ''}
       </p>
       <div class="table-wrap"><table>
         ${p.item
@@ -371,7 +373,7 @@ window.Views = (function () {
         <button type="button" class="btn" data-aksi="cetak">🖨️ Cetak Struk</button>
         <button type="button" class="btn" data-aksi="wa" ${p.pelanggan.hp ? '' : 'disabled'}>💬 Kirim WA</button>
         ${sisa ? `<button type="button" class="btn btn-primary" data-aksi="lunas">✅ Tandai Lunas</button>` : ''}
-        <button type="button" class="btn btn-danger" data-aksi="hapus">🗑️ Hapus</button>
+        ${Auth.isOwner() ? `<button type="button" class="btn btn-danger" data-aksi="hapus">🗑️ Hapus</button>` : ''}
       </div>
       <div class="modal-actions">
         <button type="submit" class="btn btn-block" value="tutup">Tutup</button>
@@ -616,6 +618,129 @@ window.Views = (function () {
     gambar();
   }
 
+  /* ================= PENGGUNA (khusus owner) ================= */
+  function penggunaAkun(el) {
+    el.innerHTML = `
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Pengguna</h1>
+          <p class="page-sub">Akun owner dan pegawai beserta PIN masuknya.</p>
+        </div>
+        <button class="btn btn-primary" id="btnTambahUser" type="button">+ Tambah Pengguna</button>
+      </div>
+
+      <div class="card card-pad" style="margin-bottom:16px; border-left:4px solid var(--warn)">
+        <b>Yang perlu diketahui soal PIN ini</b>
+        <p class="muted" style="margin-bottom:0">
+          PIN mencegah pegawai membuka laporan omzet, mengubah harga, dan menghapus pesanan —
+          cukup untuk pemakaian sehari-hari. Namun selama data masih tersimpan di dalam tablet,
+          PIN ini <b>bukan keamanan sungguhan</b>: orang yang paham peralatan developer browser
+          tetap bisa menembusnya. Keamanan penuh menyusul saat data dipindahkan ke server.
+        </p>
+      </div>
+
+      <div class="card"><div class="table-wrap"><table>
+        <thead><tr><th>Nama</th><th>Peran</th><th>Status</th><th>PIN</th><th class="right">Aksi</th></tr></thead>
+        <tbody id="barisUser"></tbody>
+      </table></div></div>`;
+
+    const tbody = el.querySelector('#barisUser');
+
+    function gambar() {
+      const sedangMasuk = Auth.aktif();
+      tbody.innerHTML = DB.pengguna()
+        .map(
+          (u) => `<tr>
+            <td>
+              <b>${esc(u.nama)}</b>
+              ${u.id === sedangMasuk?.id ? '<span class="pill pill-info" style="margin-left:6px">Anda</span>' : ''}
+            </td>
+            <td>${u.peran === 'owner' ? 'Owner' : 'Pegawai'}</td>
+            <td>${u.aktif === false ? '<span class="pill pill-muted">Nonaktif</span>' : '<span class="pill pill-ok">Aktif</span>'}</td>
+            <td>${u.pinBawaan ? '<span class="pill pill-danger">Masih PIN bawaan</span>' : '••••'}</td>
+            <td class="right" style="white-space:nowrap">
+              <button class="btn btn-sm" data-ubah="${u.id}">Ubah</button>
+              <button class="btn btn-sm btn-danger" data-hapus="${u.id}">Hapus</button>
+            </td>
+          </tr>`
+        )
+        .join('');
+    }
+
+    function formUser(u) {
+      formModal(
+        u ? `Ubah ${u.nama}` : 'Tambah Pengguna',
+        `<div class="field"><label>Nama</label>
+           <input class="input" name="nama" value="${esc(u?.nama || '')}" placeholder="Contoh: Rina"></div>
+         <div class="field"><label>Peran</label>
+           <select class="input" name="peran">
+             <option value="pegawai" ${u?.peran === 'owner' ? '' : 'selected'}>Pegawai — Kasir, Pesanan, Pelanggan</option>
+             <option value="owner" ${u?.peran === 'owner' ? 'selected' : ''}>Owner — semua menu</option>
+           </select></div>
+         <div class="field"><label>PIN 4–6 angka${u ? ' (kosongkan jika tidak diganti)' : ''}</label>
+           <input class="input" name="pin" type="password" inputmode="numeric" autocomplete="new-password"
+                  minlength="4" maxlength="6" placeholder="${u ? 'Tidak diubah' : 'Contoh: 4821'}"></div>
+         <div class="field"><label><input type="checkbox" name="aktif" ${u?.aktif === false ? '' : 'checked'}> Akun aktif (boleh masuk)</label></div>`,
+        (v) => {
+          const pin = (v.pin || '').trim();
+          if (!v.nama.trim()) return U.toast('Nama wajib diisi');
+          if (pin && !/^\d{4,6}$/.test(pin)) return U.toast('PIN harus 4–6 angka');
+          if (!u && !pin) return U.toast('PIN wajib diisi untuk pengguna baru');
+          try {
+            DB.simpanPengguna({ id: u?.id, nama: v.nama.trim(), peran: v.peran, pin: pin || undefined, aktif: !!v.aktif });
+            gambar();
+            window.SegarkanMenu();
+            U.toast('Pengguna tersimpan');
+            // Kalau owner menurunkan perannya sendiri, menu ikut menyesuaikan.
+            if (u && u.id === Auth.aktif()?.id && v.peran !== 'owner') location.hash = 'kasir';
+          } catch (err) {
+            U.toast(err.message);
+          }
+        }
+      );
+    }
+
+    el.querySelector('#btnTambahUser').addEventListener('click', () => formUser(null));
+
+    tbody.addEventListener('click', async (e) => {
+      const ubah = e.target.closest('[data-ubah]');
+      const hapus = e.target.closest('[data-hapus]');
+      if (ubah) formUser(DB.cariPengguna(ubah.dataset.ubah));
+      if (hapus) {
+        const u = DB.cariPengguna(hapus.dataset.hapus);
+        const diriSendiri = u.id === Auth.aktif()?.id;
+        const ya = await U.konfirmasi(
+          'Hapus pengguna?',
+          `${u.nama} tidak bisa masuk lagi.${diriSendiri ? ' Ini akun Anda sendiri — Anda akan langsung dikeluarkan.' : ''}`,
+          'Hapus'
+        );
+        if (!ya) return;
+        try {
+          DB.hapusPengguna(u.id);
+          if (diriSendiri) {
+            Auth.kunci();
+            window.MintaMasuk();
+            return;
+          }
+          gambar();
+          U.toast('Pengguna dihapus');
+        } catch (err) {
+          U.toast(err.message);
+        }
+      }
+    });
+
+    gambar();
+  }
+
+  /** Ingatkan sekali setiap masuk kalau PIN bawaan 1234 belum diganti. */
+  function ingatkanPinBawaan() {
+    const u = Auth.aktif();
+    if (u?.pinBawaan) {
+      U.toast('PIN Anda masih 1234 — ganti di menu Pengguna');
+    }
+  }
+
   /* ================= PENGATURAN ================= */
   function pengaturan(el) {
     const t = DB.toko();
@@ -697,5 +822,5 @@ window.Views = (function () {
     });
   }
 
-  return { kasir, pesanan, pelanggan, laporan, layanan, pengaturan };
+  return { kasir, pesanan, pelanggan, laporan, layanan, penggunaAkun, pengaturan, ingatkanPinBawaan };
 })();

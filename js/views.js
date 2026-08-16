@@ -34,6 +34,166 @@ window.Views = (function () {
     return `<span class="pill ${kelas[status] || 'pill-muted'}">${esc(DB.LABEL_STATUS[status] || status)}</span>`;
   }
 
+  /* ============ Grafik batang sederhana (satu seri, tanpa pustaka) ============
+     Satu seri saja, jadi tidak perlu legenda — judul kartu yang menamainya.
+     Batang memakai warna merek; label nilai hanya pada batang tertinggi dan
+     hari ini, sisanya muncul saat batang disentuh. */
+  function grafikBatang(el, data, format) {
+    const maks = Math.max(1, ...data.map((d) => d.nilai));
+    const iMaks = data.findIndex((d) => d.nilai === maks);
+
+    el.innerHTML = `
+      <div class="grafik">
+        <div class="grafik-batangan" role="img" aria-label="Grafik batang, ${data.length} hari terakhir">
+          ${data
+            .map((d, i) => {
+              // Batang nol tetap disisakan garis tipis supaya harinya terlihat ada.
+              const persen = d.nilai === 0 ? 0 : Math.max(4, (100 * d.nilai) / maks);
+              const berlabel = i === iMaks || d.hariIni;
+              return `
+            <div class="gb-kolom" data-i="${i}">
+              <div class="gb-nilai">${berlabel ? esc(format(d.nilai)) : ''}</div>
+              <div class="gb-jalur">
+                <div class="gb-isi ${d.hariIni ? 'kini' : ''}" style="height:${persen}%"></div>
+              </div>
+              <div class="gb-label ${d.hariIni ? 'kini' : ''}">${esc(d.label)}</div>
+            </div>`;
+            })
+            .join('')}
+        </div>
+        <p class="grafik-tip muted" id="grafikTip">Sentuh batang untuk melihat angkanya.</p>
+        <details class="grafik-tabel">
+          <summary>Lihat sebagai tabel</summary>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Hari</th><th class="right">Jumlah</th></tr></thead>
+            <tbody>${data.map((d) => `<tr><td>${esc(d.judul)}</td><td class="right">${format(d.nilai)}</td></tr>`).join('')}</tbody>
+          </table></div>
+        </details>
+      </div>`;
+
+    const tip = el.querySelector('#grafikTip');
+    const tunjuk = (i) => {
+      const d = data[i];
+      tip.textContent = `${d.judul}: ${format(d.nilai)}`;
+    };
+    el.querySelectorAll('.gb-kolom').forEach((b) => {
+      b.addEventListener('pointerenter', () => tunjuk(+b.dataset.i));
+      b.addEventListener('pointerdown', () => tunjuk(+b.dataset.i));
+    });
+  }
+
+  /* ================= BERANDA ================= */
+  function beranda(el) {
+    const owner = Auth.isOwner();
+    const semua = DB.pesanan();
+    const hariIni = U.hariIni();
+    const sekarang = new Date();
+
+    const pesananHariIni = semua.filter((p) => U.hariKunci(p.dibuat) === hariIni);
+    const omzetHariIni = pesananHariIni.reduce((a, p) => a + p.total, 0);
+    const belumAmbil = semua.filter((p) => p.status !== 'diambil');
+    const siapDiambil = semua.filter((p) => p.status === 'siap');
+    const sedangDicuci = semua.filter((p) => p.status === 'proses');
+    const terlambat = belumAmbil.filter((p) => new Date(p.estimasiSelesai) < sekarang);
+    const belumLunas = semua.filter((p) => !p.lunas);
+    const piutang = belumLunas.reduce((a, p) => a + (p.total - p.dibayar), 0);
+
+    // Tujuh hari terakhir, hari ini paling kanan.
+    const HARI = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+    const tren = [];
+    for (let i = 6; i >= 0; i--) {
+      const t = new Date();
+      t.setHours(0, 0, 0, 0);
+      t.setDate(t.getDate() - i);
+      const kunci = U.hariKunci(t);
+      const punya = semua.filter((p) => U.hariKunci(p.dibuat) === kunci);
+      tren.push({
+        label: HARI[t.getDay()],
+        judul: U.tanggal(t),
+        nilai: owner ? punya.reduce((a, p) => a + p.total, 0) : punya.length,
+        hariIni: kunci === hariIni,
+      });
+    }
+
+    const tile = (label, nilai, keterangan, kelas = '') =>
+      `<div class="stat ${kelas}">
+         <div class="stat-label">${esc(label)}</div>
+         <div class="stat-value">${nilai}</div>
+         ${keterangan ? `<div class="stat-note">${keterangan}</div>` : ''}
+       </div>`;
+
+    const daftarRingkas = (judul, daftar, kelasPill, kosong) => `
+      <div class="perhatian-blok">
+        <div class="perhatian-judul">
+          <span>${esc(judul)}</span>
+          <span class="pill ${kelasPill}">${daftar.length}</span>
+        </div>
+        ${
+          daftar.length
+            ? `<ul class="perhatian-daftar">${daftar
+                .slice(0, 5)
+                .map(
+                  (p) => `<li><button type="button" data-buka="${p.id}">
+                      <span>${esc(p.pelanggan.nama)}</span>
+                      <span class="muted">${esc(p.kode)}</span>
+                    </button></li>`
+                )
+                .join('')}
+               ${daftar.length > 5 ? `<li class="muted" style="padding:6px 2px">+${daftar.length - 5} lainnya</li>` : ''}
+              </ul>`
+            : `<p class="muted" style="margin:6px 0 0">${esc(kosong)}</p>`
+        }
+      </div>`;
+
+    el.innerHTML = `
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Beranda</h1>
+          <p class="page-sub">${esc(DB.toko().nama)} • ${U.tanggal(sekarang)}</p>
+        </div>
+        <button class="btn btn-primary" id="btnPesananBaru" type="button">+ Pesanan Baru</button>
+      </div>
+
+      <div class="stats">
+        ${
+          owner
+            ? tile('Omzet hari ini', U.rupiah(omzetHariIni), `${pesananHariIni.length} pesanan masuk`, 'stat-hero') +
+              tile('Belum dibayar', U.rupiah(piutang), `${belumLunas.length} nota`) +
+              tile('Cucian belum diambil', belumAmbil.length, `${siapDiambil.length} sudah siap`) +
+              tile('Lewat estimasi', terlambat.length, terlambat.length ? 'perlu ditindaklanjuti' : 'semua tepat waktu')
+            : tile('Pesanan hari ini', pesananHariIni.length, 'diterima sejak pagi', 'stat-hero') +
+              tile('Sedang dicuci', sedangDicuci.length, '') +
+              tile('Siap diambil', siapDiambil.length, 'tunggu pelanggan') +
+              tile('Lewat estimasi', terlambat.length, terlambat.length ? 'perlu ditindaklanjuti' : 'semua tepat waktu')
+        }
+      </div>
+
+      <div class="beranda-bawah">
+        <div class="card">
+          <div class="card-head">${owner ? 'Omzet 7 hari terakhir' : 'Pesanan masuk 7 hari terakhir'}</div>
+          <div class="card-pad" id="kotakGrafik"></div>
+        </div>
+
+        <div class="card card-pad" id="perhatian">
+          <h3 style="margin:0 0 12px">Perlu perhatian</h3>
+          ${daftarRingkas('Siap diambil', siapDiambil, 'pill-ok', 'Belum ada yang menunggu diambil.')}
+          ${daftarRingkas('Lewat estimasi', terlambat, 'pill-danger', 'Tidak ada yang terlambat.')}
+          ${owner ? daftarRingkas('Belum lunas', belumLunas, 'pill-warn', 'Semua nota sudah lunas.') : ''}
+        </div>
+      </div>`;
+
+    grafikBatang(el.querySelector('#kotakGrafik'), tren, owner ? U.rupiah : (n) => `${n} pesanan`);
+
+    el.querySelector('#btnPesananBaru').addEventListener('click', () => {
+      location.hash = 'kasir';
+    });
+
+    el.querySelector('#perhatian').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-buka]');
+      if (b) detailPesanan(b.dataset.buka, () => beranda(el));
+    });
+  }
+
   /* ================= KASIR ================= */
   const pos = { keranjang: [], cari: '' };
 
@@ -674,7 +834,7 @@ window.Views = (function () {
            <input class="input" name="nama" value="${esc(u?.nama || '')}" placeholder="Contoh: Rina"></div>
          <div class="field"><label>Peran</label>
            <select class="input" name="peran">
-             <option value="pegawai" ${u?.peran === 'owner' ? '' : 'selected'}>Pegawai — Kasir, Pesanan, Pelanggan</option>
+             <option value="pegawai" ${u?.peran === 'owner' ? '' : 'selected'}>Pegawai — Beranda, Kasir, Pesanan, Pelanggan</option>
              <option value="owner" ${u?.peran === 'owner' ? 'selected' : ''}>Owner — semua menu</option>
            </select></div>
          <div class="field"><label>PIN 4–6 angka${u ? ' (kosongkan jika tidak diganti)' : ''}</label>
@@ -692,7 +852,7 @@ window.Views = (function () {
             window.SegarkanMenu();
             U.toast('Pengguna tersimpan');
             // Kalau owner menurunkan perannya sendiri, menu ikut menyesuaikan.
-            if (u && u.id === Auth.aktif()?.id && v.peran !== 'owner') location.hash = 'kasir';
+            if (u && u.id === Auth.aktif()?.id && v.peran !== 'owner') location.hash = 'beranda';
           } catch (err) {
             U.toast(err.message);
           }
@@ -758,6 +918,20 @@ window.Views = (function () {
           <div class="field"><label>Alamat</label><input class="input" id="tAlamat" value="${esc(t.alamat)}"></div>
           <div class="field"><label>Telepon</label><input class="input" id="tTelp" value="${esc(t.telp)}"></div>
           <div class="field"><label>Catatan bawah struk</label><textarea class="input" id="tCatatan">${esc(t.catatanStruk)}</textarea></div>
+          <div class="field">
+            <label>Logo toko</label>
+            <div class="row" style="align-items:center">
+              <div style="flex:0 0 auto">
+                ${t.logo || Merek.LOGO ? `<img src="${t.logo || Merek.LOGO}" alt="Logo toko" style="width:120px;max-height:64px;object-fit:contain;border:1px solid var(--border);border-radius:10px;padding:4px;background:#fff">` : '<span style="font-size:34px">🧺</span>'}
+              </div>
+              <div>
+                <label class="btn btn-sm btn-block" for="fileLogo">Pilih gambar</label>
+                <input type="file" id="fileLogo" accept="image/*" hidden>
+                ${t.logo ? '<button class="btn btn-sm btn-danger btn-block mt" id="btnHapusLogo" type="button">Hapus logo</button>' : ''}
+              </div>
+            </div>
+            <small class="muted">Tampil di menu samping, layar masuk, dan struk. Gambar otomatis diperkecil agar hemat penyimpanan.</small>
+          </div>
           <button class="btn btn-primary btn-block" id="btnSimpanToko" type="button">Simpan</button>
         </div>
 
@@ -785,8 +959,28 @@ window.Views = (function () {
         telp: el.querySelector('#tTelp').value.trim(),
         catatanStruk: el.querySelector('#tCatatan').value.trim(),
       });
-      document.getElementById('brandName').textContent = DB.toko().nama;
+      window.SegarkanMerek();
       U.toast('Data toko tersimpan');
+    });
+
+    el.querySelector('#fileLogo').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        DB.simpanToko({ logo: await U.bacaGambarKecil(file, 320) });
+        window.SegarkanMerek();
+        pengaturan(el);
+        U.toast('Logo tersimpan');
+      } catch (err) {
+        U.toast('Gagal memuat logo: ' + err.message);
+      }
+    });
+
+    el.querySelector('#btnHapusLogo')?.addEventListener('click', () => {
+      DB.simpanToko({ logo: '' });
+      window.SegarkanMerek();
+      pengaturan(el);
+      U.toast('Logo dihapus');
     });
 
     el.querySelector('#btnEkspor').addEventListener('click', () => {
@@ -805,7 +999,7 @@ window.Views = (function () {
         DB.impor(await file.text());
         U.toast('Data berhasil dipulihkan');
         pengaturan(el);
-        document.getElementById('brandName').textContent = DB.toko().nama;
+        window.SegarkanMerek();
       } catch (err) {
         U.toast('Gagal memulihkan: ' + err.message);
       }
@@ -816,11 +1010,11 @@ window.Views = (function () {
       if (ya) {
         DB.resetSemua();
         pengaturan(el);
-        document.getElementById('brandName').textContent = DB.toko().nama;
+        window.SegarkanMerek();
         U.toast('Data direset');
       }
     });
   }
 
-  return { kasir, pesanan, pelanggan, laporan, layanan, penggunaAkun, pengaturan, ingatkanPinBawaan };
+  return { beranda, kasir, pesanan, pelanggan, laporan, layanan, penggunaAkun, pengaturan, ingatkanPinBawaan };
 })();

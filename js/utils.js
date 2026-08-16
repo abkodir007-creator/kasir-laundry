@@ -44,6 +44,28 @@ window.U = (function () {
     return d;
   };
 
+  /** Baca berkas gambar lalu perkecil ke sisi terpanjang `maks` piksel.
+      Logo disimpan di dalam localStorage, jadi ukurannya harus ditekan. */
+  const bacaGambarKecil = (file, maks = 320) =>
+    new Promise((resolve, reject) => {
+      const pembaca = new FileReader();
+      pembaca.onerror = () => reject(new Error('Berkas gagal dibaca'));
+      pembaca.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Berkas itu bukan gambar yang bisa dibaca'));
+        img.onload = () => {
+          const skala = Math.min(1, maks / Math.max(img.width, img.height));
+          const kanvas = document.createElement('canvas');
+          kanvas.width = Math.round(img.width * skala);
+          kanvas.height = Math.round(img.height * skala);
+          kanvas.getContext('2d').drawImage(img, 0, 0, kanvas.width, kanvas.height);
+          resolve(kanvas.toDataURL('image/png'));
+        };
+        img.src = pembaca.result;
+      };
+      pembaca.readAsDataURL(file);
+    });
+
   const toast = (pesan) => {
     const el = document.getElementById('toast');
     el.textContent = pesan;
@@ -69,5 +91,5 @@ window.U = (function () {
       modal.addEventListener('close', () => resolve(modal.returnValue === 'ya'), { once: true });
     });
 
-  return { rupiah, angka, tanggal, jam, tanggalJam, hariKunci, hariIni, tambahHari, idBaru, esc, waNomor, toast, konfirmasi };
+  return { rupiah, angka, tanggal, jam, tanggalJam, hariKunci, hariIni, tambahHari, idBaru, esc, waNomor, bacaGambarKecil, toast, konfirmasi };
 })();

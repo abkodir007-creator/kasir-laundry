@@ -32,8 +32,10 @@ window.Receipt = (function () {
   td { padding: 1px 0; vertical-align: top; }
   .tot { font-size: 14px; font-weight: bold; }
   .kecil { font-size: 10px; }
+  .logo { display: block; margin: 0 auto 4px; max-width: 36mm; max-height: 18mm; }
 </style></head><body>
 <div class="wrap">
+  ${t.logo || Merek.LOGO ? `<img class="logo" src="${t.logo || Merek.LOGO}" alt="">` : ''}
   <h1>${U.esc(t.nama)}</h1>
   <div class="c kecil">${U.esc(t.alamat)}</div>
   <div class="c kecil">${U.esc(t.telp)}</div>

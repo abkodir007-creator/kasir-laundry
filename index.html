@@ -27,9 +27,12 @@
       <button class="nav-item" data-view="pelanggan"><span>👤</span>Pelanggan</button>
       <button class="nav-item" data-view="laporan"><span>📊</span>Laporan</button>
       <button class="nav-item" data-view="layanan"><span>🏷️</span>Layanan</button>
+      <button class="nav-item" data-view="penggunaAkun"><span>🔑</span>Pengguna</button>
       <button class="nav-item" data-view="pengaturan"><span>⚙️</span>Pengaturan</button>
+      <button class="nav-item" id="btnKunci" type="button"><span>🔒</span>Kunci</button>
     </nav>
     <div class="nav-foot">
+      <div class="nav-user" id="navUser"></div>
       <span id="netStatus" class="pill pill-ok">Offline siap</span>
     </div>
   </aside>
@@ -44,6 +47,7 @@
 </dialog>
 
 <script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
 <script src="js/db.js"></script>
 <script src="js/receipt.js"></script>
 <script src="js/views.js"></script>

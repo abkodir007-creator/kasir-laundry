@@ -1,13 +1,13 @@
 {
-  "name": "Kasir Laundry",
-  "short_name": "Kasir",
-  "description": "Aplikasi kasir laundry sederhana yang berjalan di tablet, termasuk saat offline.",
+  "name": "Kasir StarWash Laundry",
+  "short_name": "StarWash",
+  "description": "Kasir StarWash Laundry yang berjalan di tablet, termasuk saat offline.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#f1f5f9",
-  "theme_color": "#0f766e",
+  "background_color": "#EDEDED",
+  "theme_color": "#0D1B3D",
   "lang": "id",
   "icons": [
     {

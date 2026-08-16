@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect width="512" height="512" rx="96" fill="#0f766e"/>
-  <circle cx="256" cy="286" r="118" fill="none" stroke="#ccfbf1" stroke-width="26"/>
-  <path d="M158 286c26-24 52-24 78 0s52 24 78 0" fill="none" stroke="#ccfbf1" stroke-width="22" stroke-linecap="round"/>
-  <path d="M158 336c26-24 52-24 78 0s52 24 78 0" fill="none" stroke="#5eead4" stroke-width="22" stroke-linecap="round"/>
-  <rect x="132" y="108" width="248" height="48" rx="16" fill="#ccfbf1"/>
-  <circle cx="330" cy="132" r="12" fill="#0f766e"/>
+  <!-- Ikon StarWash: bintang merah dari huruf A, ditambah kilau putih. -->
+  <rect width="512" height="512" rx="112" fill="#0D1B3D"/>
+  <polygon points="256.0,124.0 291.3,223.5 396.8,226.3 313.1,290.5 343.0,391.7 256.0,332.0 169.0,391.7 198.9,290.5 115.2,226.3 220.7,223.5"
+           fill="#E11D2A"/>
+  <path d="M406 96c4 30 14 40 44 44-30 4-40 14-44 44-4-30-14-40-44-44 30-4 40-14 44-44z" fill="#FFFFFF"/>
+  <path d="M104 372c3 21 10 28 31 31-21 3-28 10-31 31-3-21-10-28-31-31 21-3 28-10 31-31z" fill="#CFE8FF"/>
 </svg>

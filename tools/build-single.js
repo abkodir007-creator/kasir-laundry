@@ -13,16 +13,16 @@ const AKAR = path.join(__dirname, '..');
 const baca = (p) => fs.readFileSync(path.join(AKAR, p), 'utf8');
 
 const css = baca('assets/styles.css');
-const js = ['js/utils.js', 'js/auth.js', 'js/db.js', 'js/receipt.js', 'js/views.js', 'js/app.js'].map(baca).join('\n');
+const js = ['js/merek.js', 'js/utils.js', 'js/auth.js', 'js/db.js', 'js/receipt.js', 'js/views.js', 'js/app.js'].map(baca).join('\n');
 const ikon = baca('assets/icon.svg');
 const ikonData = 'data:image/svg+xml;base64,' + Buffer.from(ikon).toString('base64');
 
 const html = baca('index.html');
 const badan = html.slice(html.indexOf('<body>') + 6, html.indexOf('</body>')).replace(/\s*<script src="[^"]*"><\/script>/g, '');
 
-const kepala = `<title>Kasir Laundry</title>
+const kepala = `<title>Kasir StarWash Laundry</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
-<meta name="theme-color" content="#0f766e">
+<meta name="theme-color" content="#0D1B3D">
 <link rel="icon" href="${ikonData}" type="image/svg+xml">
 <link rel="apple-touch-icon" href="${ikonData}">
 <meta name="apple-mobile-web-app-capable" content="yes">

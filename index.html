@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0f766e">
+<meta name="description" content="Aplikasi kasir laundry sederhana, jalan di tablet, bisa offline.">
+<title>Kasir Laundry</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Kasir Laundry">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+
+<div class="app">
+  <aside class="nav">
+    <div class="brand">
+      <span class="brand-mark">🧺</span>
+      <span class="brand-text" id="brandName">Kasir Laundry</span>
+    </div>
+    <nav class="nav-list" id="navList">
+      <button class="nav-item is-active" data-view="kasir"><span>🧾</span>Kasir</button>
+      <button class="nav-item" data-view="pesanan"><span>📋</span>Pesanan</button>
+      <button class="nav-item" data-view="pelanggan"><span>👤</span>Pelanggan</button>
+      <button class="nav-item" data-view="laporan"><span>📊</span>Laporan</button>
+      <button class="nav-item" data-view="layanan"><span>🏷️</span>Layanan</button>
+      <button class="nav-item" data-view="pengaturan"><span>⚙️</span>Pengaturan</button>
+    </nav>
+    <div class="nav-foot">
+      <span id="netStatus" class="pill pill-ok">Offline siap</span>
+    </div>
+  </aside>
+
+  <main class="main" id="view"></main>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<dialog class="modal" id="modal">
+  <form method="dialog" class="modal-inner" id="modalInner"></form>
+</dialog>
+
+<script src="js/utils.js"></script>
+<script src="js/db.js"></script>
+<script src="js/receipt.js"></script>
+<script src="js/views.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

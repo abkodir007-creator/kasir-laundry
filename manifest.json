@@ -1,0 +1,20 @@
+{
+  "name": "Kasir Laundry",
+  "short_name": "Kasir",
+  "description": "Aplikasi kasir laundry sederhana yang berjalan di tablet, termasuk saat offline.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f1f5f9",
+  "theme_color": "#0f766e",
+  "lang": "id",
+  "icons": [
+    {
+      "src": "assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

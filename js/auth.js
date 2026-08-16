@@ -84,7 +84,7 @@ window.Auth = (function () {
 
   /* ---------- Hak akses ---------- */
   // Pegawai melayani pelanggan; urusan uang dan harga milik owner.
-  const AKSES_PEGAWAI = ['kasir', 'pesanan', 'pelanggan'];
+  const AKSES_PEGAWAI = ['beranda', 'kasir', 'pesanan', 'pelanggan'];
 
   function boleh(menu) {
     const u = aktif();
@@ -131,8 +131,11 @@ window.Auth = (function () {
       <div class="masuk">
         <div class="masuk-kartu card">
           <div class="masuk-merek">
-            <span style="font-size:34px">🧺</span>
-            <h1 class="page-title" id="masukToko">${U.esc(DB.toko().nama)}</h1>
+            ${
+              DB.toko().logo || Merek.LOGO
+                ? `<img class="masuk-logo" src="${DB.toko().logo || Merek.LOGO}" alt="${U.esc(DB.toko().nama)}">`
+                : `<span style="font-size:34px">🧺</span><h1 class="page-title">${U.esc(DB.toko().nama)}</h1>`
+            }
             <p class="page-sub">Pilih nama Anda, lalu masukkan PIN.</p>
           </div>
 

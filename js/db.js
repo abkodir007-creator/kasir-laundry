@@ -27,10 +27,11 @@ window.DB = (function () {
 
   const AWAL = {
     toko: {
-      nama: 'Laundry Kilat',
-      alamat: 'Jl. Melati No. 12, Jakarta',
-      telp: '0812-0000-0000',
-      catatanStruk: 'Terima kasih! Barang yang tidak diambil dalam 30 hari di luar tanggung jawab kami.',
+      nama: 'StarWash Laundry',
+      alamat: 'Jl. Kenari Ruko No.03, Tajurhalang, Kec. Tajur Halang, Kabupaten Bogor',
+      telp: '',
+      logo: '',                 // data URI, diisi lewat menu Pengaturan
+      catatanStruk: 'Bersih - Wangi - Cepat - Terpercaya. Terima kasih! Barang yang tidak diambil dalam 30 hari di luar tanggung jawab kami.',
     },
     layanan: LAYANAN_AWAL,
     pengguna: penggunaAwal(),

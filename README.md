@@ -45,7 +45,11 @@ https://abkodir007-creator.github.io/kasir-laundry/
 Ikonnya akan muncul seperti aplikasi biasa, tampil layar penuh tanpa address bar.
 Setelah dibuka sekali, aplikasi tetap jalan walau tablet sedang tanpa internet.
 
-### 2. Isi data toko dan harga
+### 2. Masuk dan ganti PIN
+
+Akun bawaan: **Pemilik** dengan PIN `1234`. Segera ganti lewat menu **Pengguna**.
+
+### 3. Isi data toko dan harga
 
 Buka menu **Pengaturan** → isi nama toko, alamat, telepon (dipakai di struk).
 Lalu menu **Layanan** → sesuaikan daftar layanan dan harga dengan tarif Anda.
@@ -53,8 +57,8 @@ Harga bawaan hanya contoh.
 
 ### Tanpa internet sama sekali: versi satu berkas
 
-Seluruh aplikasi juga tersedia sebagai **satu berkas HTML** (±56 KB) yang bisa
-disimpan di tablet, dikirim lewat WhatsApp, atau ditaruh di Google Drive:
+Seluruh aplikasi juga tersedia sebagai **satu berkas HTML** yang bisa disimpan di
+tablet, dikirim lewat WhatsApp, atau ditaruh di Google Drive:
 
 https://abkodir007-creator.github.io/kasir-laundry/dist/kasir-laundry.html
 
@@ -66,6 +70,31 @@ node tools/build-single.js
 ```
 
 ---
+
+## Login owner & pegawai
+
+Aplikasi dibuka dengan **PIN 4–6 angka**. Owner menambah akun pegawai lewat menu
+**Pengguna**.
+
+| Menu | Owner | Pegawai |
+|---|:---:|:---:|
+| Kasir, Pesanan, Pelanggan | ✅ | ✅ |
+| Laporan omzet | ✅ | — |
+| Layanan & harga | ✅ | — |
+| Pengaturan, Pengguna | ✅ | — |
+| Hapus pesanan | ✅ | — |
+
+Nama kasir tercatat di setiap nota dan tercetak di struk, jadi terlihat siapa
+yang menerima pesanan. Tombol **Kunci** di menu samping dipakai saat ganti
+shift; aplikasi tidak mengunci sendiri, dan sesi berakhir saat aplikasi ditutup.
+
+> ⚠️ **Batas kemampuan.** Selama data masih disimpan di dalam tablet, PIN ini
+> adalah *pagar operasional*, bukan keamanan sungguhan: efektif mencegah salah
+> pencet dan rasa penasaran, tetapi orang yang paham peralatan developer browser
+> tetap bisa menembusnya. PIN disimpan sebagai hash SHA-256 bergaram, bukan teks
+> polos, sehingga tidak terbaca sekilas. Keamanan penuh — password divalidasi
+> server dan tidak bisa dilewati dari sisi tablet — menyusul saat data pindah ke
+> server (lihat "Rencana lanjutan" poin 1).
 
 ## Fitur
 
@@ -91,6 +120,7 @@ sw.js                 service worker — membuat aplikasi bisa offline
 assets/styles.css     tampilan, dioptimalkan untuk layar sentuh
 assets/icon.svg       ikon aplikasi
 js/utils.js           format rupiah, tanggal, toast, konfirmasi
+js/auth.js            login PIN, hak akses owner/pegawai, SHA-256
 js/db.js              penyimpanan data (localStorage) + logika pesanan
 js/receipt.js         struk cetak dan teks WhatsApp
 js/views.js           tampilan tiap halaman
@@ -118,13 +148,14 @@ langganan GitHub Pro.
 
 ## Rencana lanjutan (kalau nanti butuh)
 
-1. **Data tersinkron antar perangkat** — ganti `js/db.js` dengan Firebase
-   Firestore atau Supabase. Hanya satu berkas itu yang perlu diubah; tampilan
-   tidak tersentuh.
+1. **Data tersinkron antar perangkat + login sungguhan** — ganti `js/db.js`
+   dengan Firebase Firestore atau Supabase. Hanya satu berkas itu yang perlu
+   diubah; tampilan tidak tersentuh. Pemeriksaan PIN di `js/auth.js` ikut
+   berpindah ke server, sementara layar masuk, daftar pengguna, dan aturan hak
+   aksesnya tetap dipakai apa adanya.
 2. **Printer thermal Bluetooth** — pasang RawBT di Android, atau bungkus
    aplikasi ini dengan Capacitor agar dapat akses Bluetooth.
-3. **Login multi-kasir** — perlu server/autentikasi, ikut paket poin 1.
-4. **Notifikasi WhatsApp otomatis** saat cucian siap — perlu layanan WhatsApp
+3. **Notifikasi WhatsApp otomatis** saat cucian siap — perlu layanan WhatsApp
    Business API berbayar; versi sekarang memakai cara manual (tombol Kirim WA)
    yang gratis.
 

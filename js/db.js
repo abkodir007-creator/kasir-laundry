@@ -16,6 +16,15 @@ window.DB = (function () {
     { id: 'l10', nama: 'Boneka Besar',      satuan: 'pcs', harga: 28000, durasi: 3, aktif: true },
   ];
 
+  /* Akun bawaan: satu owner dengan PIN 1234 yang wajib diganti.
+     Garam diacak per pemasangan agar hash tidak seragam antar toko. */
+  function penggunaAwal() {
+    const garam = Auth.garamBaru();
+    return [
+      { id: 'u1', nama: 'Pemilik', peran: 'owner', garam, hash: Auth.hashPin('1234', garam), pinBawaan: true, aktif: true },
+    ];
+  }
+
   const AWAL = {
     toko: {
       nama: 'Laundry Kilat',
@@ -24,6 +33,7 @@ window.DB = (function () {
       catatanStruk: 'Terima kasih! Barang yang tidak diambil dalam 30 hari di luar tanggung jawab kami.',
     },
     layanan: LAYANAN_AWAL,
+    pengguna: penggunaAwal(),
     pesanan: [],
     nomorTerakhir: 0,
   };
@@ -72,6 +82,48 @@ window.DB = (function () {
     simpan();
   }
 
+  /* ---------- Pengguna (owner & pegawai) ---------- */
+  const pengguna = () => state.pengguna;
+  const cariPengguna = (id) => state.pengguna.find((u) => u.id === id);
+  const ownerAktif = () => state.pengguna.filter((u) => u.peran === 'owner' && u.aktif !== false);
+
+  function simpanPengguna(data) {
+    const lama = data.id ? cariPengguna(data.id) : null;
+
+    // Toko harus selalu punya minimal satu owner yang bisa masuk.
+    if (lama && lama.peran === 'owner' && ownerAktif().length === 1) {
+      if (data.peran === 'pegawai' || data.aktif === false) {
+        throw new Error('Owner terakhir tidak bisa dinonaktifkan atau diturunkan jadi pegawai');
+      }
+    }
+
+    const baru = { ...(lama || { id: U.idBaru(), aktif: true }), nama: data.nama, peran: data.peran };
+    if (data.aktif !== undefined) baru.aktif = data.aktif;
+
+    if (data.pin) {
+      baru.garam = Auth.garamBaru();
+      baru.hash = Auth.hashPin(data.pin, baru.garam);
+      baru.pinBawaan = false;
+    } else if (!lama) {
+      throw new Error('PIN wajib diisi untuk pengguna baru');
+    }
+
+    if (lama) state.pengguna[state.pengguna.indexOf(lama)] = baru;
+    else state.pengguna.push(baru);
+    simpan();
+    return baru;
+  }
+
+  function hapusPengguna(id) {
+    const u = cariPengguna(id);
+    if (!u) return;
+    if (u.peran === 'owner' && ownerAktif().length === 1) {
+      throw new Error('Owner terakhir tidak bisa dihapus');
+    }
+    state.pengguna = state.pengguna.filter((x) => x.id !== id);
+    simpan();
+  }
+
   /* ---------- Pesanan ---------- */
   const STATUS = ['antrian', 'proses', 'siap', 'diambil'];
   const LABEL_STATUS = { antrian: 'Diterima', proses: 'Dicuci', siap: 'Siap Diambil', diambil: 'Selesai' };
@@ -102,6 +154,7 @@ window.DB = (function () {
       metode: input.metode || 'tunai',
       lunas: (input.dibayar || 0) >= input.total,
       status: 'antrian',
+      kasir: input.kasir || '-',            // siapa yang menerima pesanan ini
       catatan: (input.catatan || '').trim(),
       dibuat: sekarang,
       estimasiSelesai: U.tambahHari(sekarang, maksDurasi),
@@ -179,6 +232,7 @@ window.DB = (function () {
   return {
     STATUS, LABEL_STATUS,
     layanan, layananAktif, cariLayanan, simpanLayanan, hapusLayanan,
+    pengguna, cariPengguna, simpanPengguna, hapusPengguna,
     pesanan, cariPesanan, buatPesanan, ubahStatus, lunasi, hapusPesanan,
     pelanggan, toko, simpanToko, ekspor, impor, resetSemua,
   };

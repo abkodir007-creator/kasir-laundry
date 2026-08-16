@@ -172,6 +172,46 @@ tbody tr:last-child td { border-bottom: 0; }
 .stat-label { font-size: 13px; color: var(--muted); font-weight: 600; }
 .stat-value { font-size: 24px; font-weight: 800; margin-top: 4px; }
 
+/* ---------- Layar masuk (PIN) ---------- */
+.masuk {
+  min-height: 100dvh;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px; background: var(--bg);
+}
+.masuk-kartu { width: min(420px, 100%); padding: 24px; }
+.masuk-merek { text-align: center; margin-bottom: 18px; }
+.masuk-merek .page-title { margin: 6px 0 0; }
+.masuk-orang { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; max-height: 30vh; overflow: auto; }
+.orang {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  min-height: var(--tap); padding: 0 14px;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface); cursor: pointer; text-align: left;
+}
+.orang.is-active { border-color: var(--brand); background: var(--brand-soft); }
+.orang-nama { font-weight: 700; }
+
+.pin-titik { display: flex; justify-content: center; gap: 12px; margin: 4px 0 8px; }
+.pin-titik span {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid var(--brand); background: transparent;
+}
+.pin-titik span.isi { background: var(--brand); }
+.masuk-pesan { text-align: center; margin: 0 0 14px; font-size: 14px; min-height: 20px; }
+
+.tombol-angka { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.tombol-angka button {
+  min-height: 62px;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface); font-size: 22px; font-weight: 700; cursor: pointer;
+}
+.tombol-angka button:active { background: var(--surface-2); }
+.tombol-angka .btn-primary { background: var(--brand); border-color: var(--brand); color: #fff; font-size: 16px; }
+
+.nav-user { padding: 0 8px 8px; }
+.nav-user-nama { font-weight: 700; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-user-peran { font-size: 12px; opacity: .8; }
+
 /* ---------- Modal & toast ---------- */
 .modal { border: 0; border-radius: 18px; padding: 0; width: min(520px, 94vw); box-shadow: 0 24px 60px rgba(15, 23, 42, .25); }
 .modal::backdrop { background: rgba(15, 23, 42, .45); }

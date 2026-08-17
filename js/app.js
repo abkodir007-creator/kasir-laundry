@@ -181,6 +181,19 @@
         return;
       }
       DB.pakaiAwan(true);
+
+      /* Cari tahu dulu apakah server sudah pernah diisi. Selama belum, data
+         kosong dari server tidak boleh menimpa isi tablet — lihat catatan di
+         js/db.js. Kalau pemeriksaan gagal, jawabannya tetap "belum", karena
+         arah itu yang aman. */
+      Awan.serverBerisi()
+        .then((berisi) => {
+          DB.tandaiServerSiap(berisi);
+          if (!berisi) U.toast('Server masih kosong — buka Pengaturan lalu tekan "Pindahkan data ke server"');
+          segarkanIsi();
+        })
+        .catch(() => DB.tandaiServerSiap(false));
+
       Awan.sinkronkan(
         (nama, isi) => {
           DB.terapkanDariAwan(nama, isi);

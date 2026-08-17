@@ -1346,7 +1346,14 @@ window.Views = (function () {
           ? '<p class="muted">Versi ini berjalan tanpa server. Data hanya ada di tablet ini.</p>'
           : masuk
             ? `<p class="muted">Tersambung sebagai <b>${esc(masuk.email)}</b>.
-                 Data tersimpan di server dan muncul di semua perangkat yang memakai akun ini.</p>`
+                 Data tersimpan di server dan muncul di semua perangkat yang memakai akun ini.</p>
+               ${
+                 DB.serverSudahSiap()
+                   ? ''
+                   : `<p class="pill pill-warn" style="display:block">Server masih kosong. Data tablet ini aman dan
+                      tidak akan terhapus, tapi belum ikut tersimpan di server. Tekan tombol di bawah untuk
+                      memindahkannya sekali.</p>`
+               }`
             : '<p class="muted">Belum tersambung ke server.</p>'
       }
 
@@ -1397,6 +1404,10 @@ window.Views = (function () {
       U.toast('Mengunggah…');
       try {
         const masukJumlah = await Awan.unggahSemua(state);
+        // Mulai sekarang server dianggap sudah disiapkan, jadi penghapusan
+        // yang sah boleh ikut turun ke tablet lain.
+        DB.tandaiServerSiap(true);
+        gambarKartuServer(el);
         U.toast(`${masukJumlah} catatan berhasil diunggah`);
       } catch (e) {
         U.toast('Gagal mengunggah: ' + e.message);

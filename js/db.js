@@ -69,6 +69,17 @@ window.DB = (function () {
   }
 
   let state = muat();
+  pastikanAdaOwner();
+
+  /* Tablet tidak boleh pernah terkunci tanpa satu pun akun. Kalau daftar
+     pengguna kosong — misalnya karena data server sempat masuk dalam keadaan
+     kosong — owner bawaan dipasang kembali supaya masih bisa dibuka. */
+  function pastikanAdaOwner() {
+    if (!state.pengguna || !state.pengguna.length) {
+      state.pengguna = penggunaAwal();
+      simpan();
+    }
+  }
 
   // Pemasangan lama menyimpan nomor di dalam state; pindahkan sekali ke lokal.
   if (localStorage.getItem(K_NOMOR) === null) {
@@ -392,11 +403,30 @@ window.DB = (function () {
   /** Dipanggil app.js begitu akun toko aktif atau keluar. */
   function pakaiAwan(nyala) {
     awanAktif = !!nyala;
+    if (!awanAktif) serverSiap = false;
   }
+
+  /* Apakah server sudah pernah diisi? Selama jawabannya belum, data dari
+     server TIDAK BOLEH mengosongkan data tablet.
+
+     Ini pelajaran mahal: pada versi pertama, tablet yang masuk ke akun toko
+     dengan server yang masih kosong langsung menerima "daftar kosong" untuk
+     semua koleksi, lalu menyimpannya menimpa data lokal. Akibatnya layanan,
+     pesanan, dan bahkan daftar pengguna ikut hilang sehingga aplikasi tidak
+     bisa dibuka. Sekarang arah pengosongan dikunci sampai pemilik menekan
+     "Pindahkan data ke server". */
+  let serverSiap = false;
+  const tandaiServerSiap = (v) => { serverSiap = !!v; };
+
+  const kosong = (isi) => !isi || (Array.isArray(isi) ? !isi.length : !Object.keys(isi).length);
 
   /** Data dari server masuk ke memori. Bentuknya sama dengan state lokal,
       jadi seluruh halaman tetap membaca seperti biasa. */
   function terapkanDariAwan(nama, isi) {
+    // Server kosong + tablet berisi + server belum disiapkan = jangan sentuh.
+    const lokalBerisi = nama === 'toko' ? true : !!(state[nama] || []).length;
+    if (!serverSiap && kosong(isi) && lokalBerisi) return;
+
     if (nama === 'toko') state.toko = { ...AWAL.toko, ...isi };
     else state[nama] = isi;
 
@@ -404,6 +434,7 @@ window.DB = (function () {
     if (nama === 'pengeluaran') {
       state.pengeluaran.sort((a, b) => (a.tanggal < b.tanggal ? 1 : a.tanggal > b.tanggal ? -1 : 0));
     }
+    pastikanAdaOwner();
     simpan();
   }
 
@@ -413,6 +444,7 @@ window.DB = (function () {
     STATUS, LABEL_STATUS, KATEGORI,
     pakaiAwan, terapkanDariAwan, seluruhState, kodePerangkat,
     pakaiAwanAktif: () => awanAktif,
+    tandaiServerSiap, serverSudahSiap: () => serverSiap,
     pengeluaran, cariPengeluaran, simpanPengeluaran, hapusPengeluaran,
     layanan, layananAktif, cariLayanan, simpanLayanan, hapusLayanan,
     pengguna, cariPengguna, simpanPengguna, hapusPengguna,

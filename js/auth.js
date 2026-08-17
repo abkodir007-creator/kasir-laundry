@@ -121,6 +121,60 @@ window.Auth = (function () {
     sessionStorage.removeItem(KUNCI_SESI);
   }
 
+  /* ---------- Layar masuk akun toko ----------
+     Hanya muncul sekali per tablet. Setelah berhasil, sesi disimpan Firebase
+     dan tablet langsung lompat ke layar PIN pada pembukaan berikutnya. */
+  function layarToko(el, onMasuk) {
+    el.innerHTML = `
+      <div class="masuk">
+        <form class="masuk-kartu card" id="formToko">
+          <div class="masuk-merek">
+            ${Merek.LOGO ? `<img class="masuk-logo" src="${Merek.LOGO}" alt="">` : '<span style="font-size:34px">🧺</span>'}
+            <h1 class="page-title">Masuk Akun Toko</h1>
+            <p class="page-sub">Cukup sekali di tablet ini. Setelahnya kasir tinggal pakai PIN.</p>
+          </div>
+          <div class="field">
+            <label for="tokoEmail">Email toko</label>
+            <input class="input" id="tokoEmail" type="email" autocomplete="username" inputmode="email" required>
+          </div>
+          <div class="field">
+            <label for="tokoSandi">Password</label>
+            <input class="input" id="tokoSandi" type="password" autocomplete="current-password" required>
+          </div>
+          <p class="masuk-pesan muted" id="tokoPesan">&nbsp;</p>
+          <button class="btn btn-primary btn-block" id="tokoKirim" type="submit">Masuk</button>
+        </form>
+      </div>`;
+
+    const pesan = el.querySelector('#tokoPesan');
+    const tombol = el.querySelector('#tokoKirim');
+
+    el.querySelector('#formToko').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = el.querySelector('#tokoEmail').value;
+      const sandi = el.querySelector('#tokoSandi').value;
+      if (!email || !sandi) return;
+      tombol.disabled = true;
+      tombol.textContent = 'Menghubungkan…';
+      pesan.innerHTML = '&nbsp;';
+      try {
+        await Awan.masukToko(email, sandi);
+        onMasuk();
+      } catch (err) {
+        const kode = err?.code || '';
+        pesan.textContent = /network/i.test(kode)
+          ? 'Tidak ada internet. Sambungkan dulu untuk masuk pertama kali.'
+          : /invalid|wrong|not-found/i.test(kode)
+            ? 'Email atau password salah.'
+            : 'Gagal masuk: ' + (err?.message || kode);
+        tombol.disabled = false;
+        tombol.textContent = 'Masuk';
+      }
+    });
+
+    el.querySelector('#tokoEmail').focus();
+  }
+
   /* ---------- Layar masuk ---------- */
   function layarMasuk(el, onMasuk) {
     const daftar = DB.pengguna().filter((u) => u.aktif !== false);
@@ -227,5 +281,5 @@ window.Auth = (function () {
     gambarTitik();
   }
 
-  return { sha256, garamBaru, hashPin, boleh, isOwner, aktif, masuk, kunci, layarMasuk, AKSES_PEGAWAI };
+  return { sha256, garamBaru, hashPin, boleh, isOwner, aktif, masuk, kunci, layarMasuk, layarToko, AKSES_PEGAWAI };
 })();

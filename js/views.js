@@ -1331,6 +1331,88 @@ window.Views = (function () {
     gambar();
   }
 
+  /** Kartu status server di halaman Pengaturan: sambungan, kode perangkat,
+      dan tombol memindahkan data lama ke server. */
+  function gambarKartuServer(el) {
+    const kotak = el.querySelector('#kartuServer');
+    if (!kotak) return;
+    const adaAwan = typeof Awan !== 'undefined' && Awan.tersedia();
+    const masuk = adaAwan && Awan.akun();
+
+    kotak.innerHTML = `
+      <h3 style="margin-top:0">Server &amp; Perangkat</h3>
+      ${
+        !adaAwan
+          ? '<p class="muted">Versi ini berjalan tanpa server. Data hanya ada di tablet ini.</p>'
+          : masuk
+            ? `<p class="muted">Tersambung sebagai <b>${esc(masuk.email)}</b>.
+                 Data tersimpan di server dan muncul di semua perangkat yang memakai akun ini.</p>`
+            : '<p class="muted">Belum tersambung ke server.</p>'
+      }
+
+      <div class="field">
+        <label for="kodeAlat">Kode perangkat</label>
+        <div class="row">
+          <input class="input" id="kodeAlat" maxlength="2" value="${esc(DB.kodePerangkat())}" style="max-width:90px">
+          <button class="btn" id="btnKodeAlat" type="button">Simpan kode</button>
+        </div>
+        <small class="muted">Masuk ke nomor nota, contoh <b>INV-260816-${esc(DB.kodePerangkat())}001</b>.
+        Beri huruf berbeda tiap tablet supaya nomor nota tidak pernah kembar, bahkan saat dua-duanya offline.</small>
+      </div>
+
+      ${
+        masuk
+          ? `<button class="btn btn-block" id="btnPindah" type="button">⬆️ Pindahkan data tablet ini ke server</button>
+             <small class="muted">Dipakai sekali saat pertama pindah. Kalau server sudah berisi, aplikasi akan menolak dan meminta konfirmasi.</small>
+             <div class="mt"></div>
+             <button class="btn btn-danger btn-block" id="btnKeluarToko" type="button">Keluar dari akun toko</button>`
+          : ''
+      }`;
+
+    kotak.querySelector('#btnKodeAlat').addEventListener('click', () => {
+      const nilai = kotak.querySelector('#kodeAlat').value.trim();
+      if (!/^[A-Za-z0-9]{1,2}$/.test(nilai)) return U.toast('Kode perangkat 1–2 huruf atau angka');
+      DB.kodePerangkat(nilai);
+      pengaturan(el);
+      U.toast('Kode perangkat disimpan');
+    });
+
+    kotak.querySelector('#btnPindah')?.addEventListener('click', async () => {
+      const state = DB.seluruhState();
+      const jumlah = state.pesanan.length + state.pengeluaran.length + state.pelanggan.length + state.layanan.length;
+      let berisi = false;
+      try {
+        berisi = await Awan.serverBerisi();
+      } catch (e) {
+        return U.toast('Tidak bisa memeriksa server: ' + e.message);
+      }
+      const ya = await U.konfirmasi(
+        berisi ? 'Server sudah berisi data' : 'Pindahkan data ke server?',
+        berisi
+          ? `Server sudah punya data. Melanjutkan akan menimpa data server dengan isi tablet ini (${jumlah} catatan). Pastikan ini tablet yang datanya paling lengkap.`
+          : `${jumlah} catatan dari tablet ini akan diunggah ke server. Data di tablet tidak dihapus.`,
+        berisi ? 'Ya, timpa server' : 'Ya, pindahkan'
+      );
+      if (!ya) return;
+      U.toast('Mengunggah…');
+      try {
+        const masukJumlah = await Awan.unggahSemua(state);
+        U.toast(`${masukJumlah} catatan berhasil diunggah`);
+      } catch (e) {
+        U.toast('Gagal mengunggah: ' + e.message);
+      }
+    });
+
+    kotak.querySelector('#btnKeluarToko')?.addEventListener('click', async () => {
+      const ya = await U.konfirmasi(
+        'Keluar dari akun toko?',
+        'Tablet ini berhenti tersambung ke server sampai dimasukkan lagi. Data yang sudah terkirim tetap aman di server.',
+        'Keluar'
+      );
+      if (ya) await Awan.keluarToko();
+    });
+  }
+
   /** Ingatkan sekali setiap masuk kalau PIN bawaan 1234 belum diganti. */
   function ingatkanPinBawaan() {
     const u = Auth.aktif();
@@ -1373,6 +1455,8 @@ window.Views = (function () {
           <button class="btn btn-primary btn-block" id="btnSimpanToko" type="button">Simpan</button>
         </div>
 
+        <div class="card card-pad" style="min-width:300px" id="kartuServer"></div>
+
         <div class="card card-pad" style="min-width:300px">
           <h3 style="margin-top:0">Cadangan Data</h3>
           <p class="muted">Data tersimpan di dalam tablet ini saja. Rutin buat cadangan agar aman jika tablet rusak atau aplikasi dihapus.</p>
@@ -1389,6 +1473,8 @@ window.Views = (function () {
           Setelah dipasang, aplikasi bisa dibuka tanpa internet.</p>
         </div>
       </div>`;
+
+    gambarKartuServer(el);
 
     el.querySelector('#btnSimpanToko').addEventListener('click', () => {
       DB.simpanToko({

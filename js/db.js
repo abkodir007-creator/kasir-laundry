@@ -41,7 +41,39 @@ window.DB = (function () {
     nomorTerakhir: 0,
   };
 
+  /* Saat akun toko aktif, tiap perubahan ikut dikirim ke Firestore.
+     Saat tidak, aplikasi berjalan persis seperti versi lokal sebelumnya. */
+  let awanAktif = false;
+  const catat = (koleksi, doc) => { if (awanAktif) Awan.tulis(koleksi, doc); };
+  const buang = (koleksi, id) => { if (awanAktif) Awan.hapus(koleksi, id); };
+
+  /* Nomor nota sengaja disimpan per tablet, bukan di server.
+
+     Kalau nomor diambil dari server, dua tablet yang sama-sama offline akan
+     menghasilkan nomor kembar dan pembukuan jadi kacau. Dengan kode perangkat
+     satu huruf, INV-260816-A-001 dan INV-260816-B-001 tidak mungkin bentrok
+     walau dua-duanya seharian tanpa sinyal. */
+  const K_PERANGKAT = 'kasir-laundry-perangkat';
+  const K_NOMOR = 'kasir-laundry-nomor';
+
+  function kodePerangkat(baru) {
+    if (baru !== undefined) {
+      localStorage.setItem(K_PERANGKAT, String(baru).toUpperCase().slice(0, 2) || 'A');
+    }
+    let k = localStorage.getItem(K_PERANGKAT);
+    if (!k) {
+      k = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+      localStorage.setItem(K_PERANGKAT, k);
+    }
+    return k;
+  }
+
   let state = muat();
+
+  // Pemasangan lama menyimpan nomor di dalam state; pindahkan sekali ke lokal.
+  if (localStorage.getItem(K_NOMOR) === null) {
+    localStorage.setItem(K_NOMOR, String(state.nomorTerakhir || 0));
+  }
 
   function muat() {
     try {
@@ -78,11 +110,13 @@ window.DB = (function () {
       state.layanan.push({ ...data, id: U.idBaru(), aktif: true });
     }
     simpan();
+    catat('layanan', data.id ? cariLayanan(data.id) : state.layanan[state.layanan.length - 1]);
   }
 
   function hapusLayanan(id) {
     state.layanan = state.layanan.filter((l) => l.id !== id);
     simpan();
+    buang('layanan', id);
   }
 
   /* ---------- Pengguna (owner & pegawai) ---------- */
@@ -114,6 +148,7 @@ window.DB = (function () {
     if (lama) state.pengguna[state.pengguna.indexOf(lama)] = baru;
     else state.pengguna.push(baru);
     simpan();
+    catat('pengguna', baru);
     return baru;
   }
 
@@ -125,6 +160,7 @@ window.DB = (function () {
     }
     state.pengguna = state.pengguna.filter((x) => x.id !== id);
     simpan();
+    buang('pengguna', id);
   }
 
   /* ---------- Pesanan ---------- */
@@ -135,10 +171,12 @@ window.DB = (function () {
   const cariPesanan = (id) => state.pesanan.find((p) => p.id === id);
 
   function kodeBaru() {
-    state.nomorTerakhir += 1;
+    const urut = (Number(localStorage.getItem(K_NOMOR)) || 0) + 1;
+    localStorage.setItem(K_NOMOR, String(urut));
+    state.nomorTerakhir = urut;
     const t = new Date();
     const ymd = `${String(t.getFullYear()).slice(2)}${String(t.getMonth() + 1).padStart(2, '0')}${String(t.getDate()).padStart(2, '0')}`;
-    return `INV-${ymd}-${String(state.nomorTerakhir).padStart(3, '0')}`;
+    return `INV-${ymd}-${kodePerangkat()}${String(urut).padStart(3, '0')}`;
   }
 
   function buatPesanan(input) {
@@ -165,6 +203,7 @@ window.DB = (function () {
     };
     state.pesanan.unshift(p);
     simpan();
+    catat('pesanan', p);
     return p;
   }
 
@@ -174,6 +213,7 @@ window.DB = (function () {
     p.status = status;
     p.riwayat.push({ status, waktu: new Date().toISOString() });
     simpan();
+    catat('pesanan', p);
   }
 
   function lunasi(id, jumlah, metode) {
@@ -184,11 +224,13 @@ window.DB = (function () {
     p.metode = metode || p.metode;
     p.lunas = p.dibayar >= p.total;
     simpan();
+    catat('pesanan', p);
   }
 
   function hapusPesanan(id) {
     state.pesanan = state.pesanan.filter((p) => p.id !== id);
     simpan();
+    buang('pesanan', id);
   }
 
   /* ---------- Pengeluaran ---------- */
@@ -221,12 +263,14 @@ window.DB = (function () {
     // Urut dari yang terbaru supaya daftar enak dibaca.
     state.pengeluaran.sort((a, b) => (a.tanggal < b.tanggal ? 1 : a.tanggal > b.tanggal ? -1 : 0));
     simpan();
+    catat('pengeluaran', baru);
     return baru;
   }
 
   function hapusPengeluaran(id) {
     state.pengeluaran = state.pengeluaran.filter((x) => x.id !== id);
     simpan();
+    buang('pengeluaran', id);
   }
 
   /* ---------- Pelanggan ----------
@@ -278,12 +322,14 @@ window.DB = (function () {
     if (lama) state.pelanggan[state.pelanggan.indexOf(lama)] = baru;
     else state.pelanggan.push(baru);
     simpan();
+    catat('pelanggan', baru);
     return baru;
   }
 
   function hapusPelanggan(id) {
     state.pelanggan = state.pelanggan.filter((c) => c.id !== id);
     simpan();
+    buang('pelanggan', id);
   }
 
   /** Masukkan hasil uraian daftar kontak. Nomor yang sudah ada dilewati. */
@@ -300,13 +346,15 @@ window.DB = (function () {
         continue;
       }
       punya.add(k);
-      state.pelanggan.push({
+      const rekaman = {
         id: U.idBaru(),
         nama: c.nama,
         hp: c.hp,
         catatan: c.catatan || '',
         dibuat: new Date().toISOString(),
-      });
+      };
+      state.pelanggan.push(rekaman);
+      catat('pelanggan', rekaman);
       masuk += 1;
     }
     simpan();
@@ -319,6 +367,7 @@ window.DB = (function () {
   function simpanToko(data) {
     state.toko = { ...state.toko, ...data };
     simpan();
+    if (awanAktif) Awan.tulisToko(state.toko);
   }
 
   const ekspor = () => JSON.stringify(state, null, 2);
@@ -340,8 +389,30 @@ window.DB = (function () {
     simpan();
   }
 
+  /** Dipanggil app.js begitu akun toko aktif atau keluar. */
+  function pakaiAwan(nyala) {
+    awanAktif = !!nyala;
+  }
+
+  /** Data dari server masuk ke memori. Bentuknya sama dengan state lokal,
+      jadi seluruh halaman tetap membaca seperti biasa. */
+  function terapkanDariAwan(nama, isi) {
+    if (nama === 'toko') state.toko = { ...AWAL.toko, ...isi };
+    else state[nama] = isi;
+
+    if (nama === 'pesanan') state.pesanan.sort((a, b) => (a.dibuat < b.dibuat ? 1 : -1));
+    if (nama === 'pengeluaran') {
+      state.pengeluaran.sort((a, b) => (a.tanggal < b.tanggal ? 1 : a.tanggal > b.tanggal ? -1 : 0));
+    }
+    simpan();
+  }
+
+  const seluruhState = () => state;
+
   return {
     STATUS, LABEL_STATUS, KATEGORI,
+    pakaiAwan, terapkanDariAwan, seluruhState, kodePerangkat,
+    pakaiAwanAktif: () => awanAktif,
     pengeluaran, cariPengeluaran, simpanPengeluaran, hapusPengeluaran,
     layanan, layananAktif, cariLayanan, simpanLayanan, hapusLayanan,
     pengguna, cariPengguna, simpanPengguna, hapusPengguna,

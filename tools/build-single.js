@@ -13,6 +13,8 @@ const AKAR = path.join(__dirname, '..');
 const baca = (p) => fs.readFileSync(path.join(AKAR, p), 'utf8');
 
 const css = baca('assets/styles.css');
+// Versi satu berkas sengaja tanpa js/awan.js: ia memang jalur cadangan
+// yang berdiri sendiri tanpa server dan tanpa internet.
 const js = ['js/merek.js', 'js/utils.js', 'js/auth.js', 'js/db.js', 'js/receipt.js', 'js/views.js', 'js/app.js'].map(baca).join('\n');
 const ikon = baca('assets/icon.svg');
 const ikonData = 'data:image/svg+xml;base64,' + Buffer.from(ikon).toString('base64');

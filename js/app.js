@@ -48,8 +48,8 @@
       : `<span class="brand-mark">🧺</span><span class="brand-text">${U.esc(t.nama)}</span>`;
   }
 
-  /** Layar PIN menggantikan seluruh aplikasi sampai berhasil masuk. */
-  function mintaMasuk() {
+  /** Layar penuh: dipakai untuk login akun toko maupun layar PIN. */
+  function layarPenuh() {
     app.hidden = true;
     let layar = document.getElementById('layarMasuk');
     if (!layar) {
@@ -59,7 +59,22 @@
       document.body.appendChild(layar);
     }
     layar.hidden = false;
+    return layar;
+  }
+
+  /** Layar PIN menggantikan seluruh aplikasi sampai berhasil masuk. */
+  function mintaMasuk() {
+    const layar = layarPenuh();
     Auth.layarMasuk(layar, mulai);
+    layar.focus();
+  }
+
+  /** Minta akun toko. Hanya muncul kalau tablet belum pernah masuk. */
+  function mintaAkunToko() {
+    const layar = layarPenuh();
+    Auth.layarToko(layar, () => {
+      /* Perpindahan berikutnya diurus pantauAkun. */
+    });
     layar.focus();
   }
 
@@ -87,12 +102,27 @@
     mintaMasuk();
   });
 
-  /* Status koneksi — aplikasi tetap berfungsi walau offline. */
+  /* Status sinkronisasi. Yang penting bagi kasir cuma satu: apakah ada
+     transaksi yang belum sampai ke server. */
   const status = document.getElementById('netStatus');
+  let tertunda = 0;
   function perbaruiStatus() {
     const online = navigator.onLine;
-    status.textContent = online ? 'Tersambung' : 'Mode offline';
-    status.className = 'pill ' + (online ? 'pill-ok' : 'pill-warn');
+    if (!DB.pakaiAwanAktif()) {
+      status.textContent = online ? 'Tersambung' : 'Mode offline';
+      status.className = 'pill ' + (online ? 'pill-ok' : 'pill-warn');
+      return;
+    }
+    if (tertunda > 0) {
+      status.textContent = `${tertunda} menunggu kirim`;
+      status.className = 'pill pill-warn';
+    } else if (!online) {
+      status.textContent = 'Offline, tersimpan';
+      status.className = 'pill pill-warn';
+    } else {
+      status.textContent = 'Tersinkron';
+      status.className = 'pill pill-ok';
+    }
   }
   window.addEventListener('online', perbaruiStatus);
   window.addEventListener('offline', perbaruiStatus);
@@ -104,9 +134,56 @@
     });
   }
 
+  /* Gambar ulang halaman saat data dari server berubah. Halaman Kasir
+     sengaja dilewati supaya isian yang sedang diketik tidak hilang. */
+  let jadwal = null;
+  function segarkanIsi() {
+    clearTimeout(jadwal);
+    jadwal = setTimeout(() => {
+      if (app.hidden || !Auth.aktif()) return;
+      const kini = navList.querySelector('.nav-item.is-active')?.dataset.view;
+      if (kini && kini !== 'kasir') buka(kini);
+      else segarkanMerek();
+    }, 250);
+  }
+
   perbaruiStatus();
-  if (Auth.aktif()) mulai();
-  else mintaMasuk();
+
+  /* Mode lokal darurat: buka alamat dengan ?lokal=1 untuk melewati server
+     sepenuhnya dan bekerja dari data di tablet saja. Berguna kalau layanan
+     Firebase sedang bermasalah dan toko tetap harus melayani. */
+  const modeLokal = new URLSearchParams(location.search).has('lokal');
+  const adaAwan = typeof Awan !== 'undefined' && Awan.tersedia() && !modeLokal;
+  if (adaAwan) {
+    Awan.mulai();
+    Awan.pantauAkun((pengguna) => {
+      if (!pengguna) {
+        DB.pakaiAwan(false);
+        Awan.hentikan();
+        Auth.kunci();
+        mintaAkunToko();
+        return;
+      }
+      DB.pakaiAwan(true);
+      Awan.sinkronkan(
+        (nama, isi) => {
+          DB.terapkanDariAwan(nama, isi);
+          segarkanIsi();
+        },
+        () => segarkanIsi(),
+        (s) => {
+          tertunda = s.tertunda;
+          perbaruiStatus();
+        }
+      );
+      if (Auth.aktif()) mulai();
+      else mintaMasuk();
+    });
+  } else if (Auth.aktif()) {
+    mulai();
+  } else {
+    mintaMasuk();
+  }
 
   // Dipakai halaman Pengguna dan Pengaturan saat data yang ditampilkan berubah.
   window.SegarkanMenu = segarkanMenu;

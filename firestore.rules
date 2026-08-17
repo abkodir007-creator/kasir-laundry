@@ -1,0 +1,42 @@
+rules_version = '2';
+
+/* Aturan akses Firestore untuk Kasir StarWash Laundry.
+
+   Prinsipnya satu kalimat: hanya akun yang terdaftar di daftar UID di bawah
+   yang boleh membaca dan menulis data toko. Selain itu ditolak, termasuk
+   orang yang berhasil membuat akun sendiri di project ini.
+
+   Cara memasang: Firebase Console -> Firestore Database -> tab Rules ->
+   ganti seluruh isinya dengan berkas ini -> Publish.
+
+   PENTING: ganti UID_TOKO di bawah dengan UID akun toko Anda. UID bisa
+   dilihat di Authentication -> Users, kolom "User UID". Boleh diisi lebih
+   dari satu kalau nanti ada tablet dengan akun berbeda. */
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Daftar akun yang boleh membuka data toko.
+    function bolehMasuk() {
+      return request.auth != null && request.auth.uid in [
+        // Akun uji (ujistarwash@gmail.com) — HAPUS BARIS INI setelah pindah selesai.
+        '3kWln4mkPWZk3nPFT9az3Iqck0U2'
+
+        // Akun toko asli — tambahkan UID-nya di sini, dahului dengan koma di
+        // baris atas. UID ada di Authentication -> Users, kolom "User UID".
+      ];
+    }
+
+    // Seluruh data toko berada di bawah satu dokumen induk, sehingga satu
+    // aturan ini sudah mencakup pesanan, pengeluaran, pelanggan, layanan,
+    // pengguna, dan pengaturan toko.
+    match /toko/{tokoId}/{document=**} {
+      allow read, write: if bolehMasuk();
+    }
+
+    // Apa pun di luar itu ditolak, tanpa kecuali.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -80,6 +80,18 @@ window.DB = (function () {
     }
   }
 
+  /* Begitu juga daftar layanan: tanpa satu pun layanan, halaman Kasir kosong
+     dan tidak ada nota yang bisa dibuat. Kalau sampai habis, daftar contoh
+     dipasang kembali dan pemilik diberi tahu supaya menyesuaikannya. Hanya
+     dijalankan saat aplikasi dibuka, bukan saat pemilik sedang menyunting. */
+  let layananDipulihkan = false;
+  function pastikanAdaLayanan() {
+    if (state.layanan && state.layanan.length) return;
+    state.layanan = structuredClone(LAYANAN_AWAL);
+    layananDipulihkan = true;
+    simpan();
+  }
+
 
   function muat() {
     try {
@@ -194,6 +206,7 @@ window.DB = (function () {
   })();
 
   pastikanAdaOwner();
+  pastikanAdaLayanan();
 
   // Pemasangan lama menyimpan nomor di dalam state; pindahkan sekali ke lokal.
   if (localStorage.getItem(K_NOMOR) === null) {
@@ -518,9 +531,21 @@ window.DB = (function () {
     // Salin dulu keadaan sekarang: inilah titik paling berisiko data tertimpa.
     cadanganOtomatis();
 
-    // Server kosong + tablet berisi + server belum disiapkan = jangan sentuh.
+    /* Daftar kosong dari server TIDAK PERNAH menimpa daftar yang berisi di
+       tablet — walau server sudah ditandai siap.
+
+       Aturan ini sengaja dibuat tanpa pengecualian setelah kejadian nyata:
+       satu tablet yang datanya sudah telanjur hilang menekan "Pindahkan data
+       ke server", sehingga keadaan kosong itu menjadi versi resmi di server
+       dan ikut mengosongkan perangkat lain. Selama masih ada satu tablet yang
+       menyimpan datanya, data itu harus menang.
+
+       Penghapusan satu-dua catatan tetap ikut tersinkron seperti biasa, karena
+       daftar yang dikirim server masih berisi. Yang ditolak hanya keadaan
+       "semua catatan hilang sekaligus" — dan itu memang tidak pernah menjadi
+       pekerjaan sehari-hari kasir. */
     const lokalBerisi = nama === 'toko' ? true : !!(state[nama] || []).length;
-    if (!serverSiap && kosong(isi) && lokalBerisi) return;
+    if (kosong(isi) && lokalBerisi) return;
 
     if (nama === 'toko') state.toko = { ...AWAL.toko, ...isi };
     else state[nama] = isi;
@@ -547,6 +572,7 @@ window.DB = (function () {
     pakaiAwan, terapkanDariAwan, seluruhState, kodePerangkat,
     pakaiAwanAktif: () => awanAktif,
     tandaiServerSiap, serverSudahSiap: () => serverSiap,
+    layananDipulihkan: () => layananDipulihkan,
     pengeluaran, cariPengeluaran, simpanPengeluaran, hapusPengeluaran,
     layanan, layananAktif, cariLayanan, simpanLayanan, hapusLayanan,
     pengguna, cariPengguna, simpanPengguna, hapusPengguna,

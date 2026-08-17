@@ -109,8 +109,12 @@
   function perbaruiStatus() {
     const online = navigator.onLine;
     if (!DB.pakaiAwanAktif()) {
-      status.textContent = online ? 'Tersambung' : 'Mode offline';
-      status.className = 'pill ' + (online ? 'pill-ok' : 'pill-warn');
+      /* Sengaja tidak pernah hijau. Sebelumnya di sini tertulis "Tersambung"
+         yang cuma berarti ada internet, sehingga perangkat yang belum masuk
+         akun toko tampak sehat padahal datanya tidak pernah sampai ke
+         server. */
+      status.textContent = online ? 'Tanpa server' : 'Mode offline';
+      status.className = 'pill pill-warn';
       return;
     }
     if (tertunda > 0) {

@@ -12,7 +12,7 @@
      jarang berubah.
 
    Saat offline, semuanya jatuh ke simpanan seperti biasa. */
-const VERSI = 'kasir-laundry-v7';
+const VERSI = 'kasir-laundry-v8';
 
 const BERKAS = [
   './',
@@ -67,7 +67,13 @@ self.addEventListener('fetch', (e) => {
 
   if (berkasAplikasi(e.request, url)) {
     e.respondWith(
-      fetch(e.request)
+      /* 'no-cache' bukan sekadar hiasan: tanpa itu permintaan ini masih boleh
+         dilayani simpanan HTTP browser, jadi "jaringan dulu" tetap bisa
+         mengembalikan berkas lama. Diuji langsung — dengan pengaturan bawaan
+         berkas yang sudah berubah tetap terbaca versi lama. Dengan 'no-cache'
+         server selalu ditanya, dan kalau berkasnya sama server cukup menjawab
+         "belum berubah" sehingga tidak boros kuota. */
+      fetch(e.request, { cache: 'no-cache' })
         .then((res) => {
           const salinan = res.clone();
           caches.open(VERSI).then((c) => c.put(e.request, salinan)).catch(() => {});

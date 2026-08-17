@@ -200,10 +200,13 @@ window.Awan = (function () {
   /** Apakah server sudah punya data? Dipakai agar pemindahan tidak menimpa. */
   async function serverBerisi() {
     if (!aktif()) return false;
-    const cek = await induk().collection('pesanan').limit(1).get();
-    if (!cek.empty) return true;
-    const doc = await induk().get();
-    return doc.exists && !!doc.data()?.toko;
+    // Daftar layanan ikut diperiksa: server yang hanya punya keterangan toko
+    // tapi tanpa satu pun layanan belum bisa disebut siap dipakai.
+    for (const nama of ['pesanan', 'layanan']) {
+      const cek = await induk().collection(nama).limit(1).get();
+      if (!cek.empty) return true;
+    }
+    return false;
   }
 
   const aktif = () => !!(dbAwan && akun());

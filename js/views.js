@@ -1426,6 +1426,10 @@ window.Views = (function () {
 
   /** Ingatkan sekali setiap masuk kalau PIN bawaan 1234 belum diganti. */
   function ingatkanPinBawaan() {
+    if (DB.layananDipulihkan()) {
+      U.toast('Daftar layanan sempat kosong — contoh layanan dipasang kembali, sesuaikan di menu Layanan');
+      return;
+    }
     const u = Auth.aktif();
     if (u?.pinBawaan) {
       U.toast('PIN Anda masih 1234 — ganti di menu Pengguna');

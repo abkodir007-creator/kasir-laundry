@@ -9,9 +9,16 @@ rules_version = '2';
    Cara memasang: Firebase Console -> Firestore Database -> tab Rules ->
    ganti seluruh isinya dengan berkas ini -> Publish.
 
-   PENTING: ganti UID_TOKO di bawah dengan UID akun toko Anda. UID bisa
-   dilihat di Authentication -> Users, kolom "User UID". Boleh diisi lebih
-   dari satu kalau nanti ada tablet dengan akun berbeda. */
+   CATATAN: UID akun toko sengaja TIDAK ditulis di berkas ini, karena
+   penyimpanan kode ini bersifat publik. UID memang bukan kata sandi dan
+   tidak memberi akses apa pun tanpa kata sandi, tapi menuliskannya di
+   tempat terbuka sama saja memberi tahu penyerang akun mana yang harus
+   ditebak. Yang berlaku adalah aturan yang dipasang di Firebase Console;
+   berkas ini adalah cetakannya.
+
+   Ganti UID_TOKO_ANDA dengan UID akun toko sebelum menekan Publish. UID ada
+   di Authentication -> Users, kolom "User UID". Boleh lebih dari satu kalau
+   nanti ada cabang dengan akun berbeda. */
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -19,11 +26,7 @@ service cloud.firestore {
     // Daftar akun yang boleh membuka data toko.
     function bolehMasuk() {
       return request.auth != null && request.auth.uid in [
-        // Akun uji (ujistarwash@gmail.com) — HAPUS BARIS INI setelah pindah selesai.
-        '3kWln4mkPWZk3nPFT9az3Iqck0U2'
-
-        // Akun toko asli — tambahkan UID-nya di sini, dahului dengan koma di
-        // baris atas. UID ada di Authentication -> Users, kolom "User UID".
+        'UID_TOKO_ANDA'
       ];
     }
 

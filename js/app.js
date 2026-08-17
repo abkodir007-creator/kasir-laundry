@@ -127,10 +127,26 @@
   window.addEventListener('online', perbaruiStatus);
   window.addEventListener('offline', perbaruiStatus);
 
-  /* Service worker: agar aplikasi bisa dibuka tanpa internet setelah kunjungan pertama. */
+  /* Service worker: agar aplikasi bisa dibuka tanpa internet setelah kunjungan pertama.
+
+     updateViaCache 'none' penting: tanpa itu berkas sw.js sendiri bisa diambil
+     dari simpanan browser, sehingga tablet bertahan di versi lama walau situs
+     sudah diperbarui. Begitu pekerja baru mengambil alih, halaman dimuat ulang
+     sekali supaya tablet langsung memakai versi terbaru. */
   if (!window.BERKAS_TUNGGAL && 'serviceWorker' in navigator && location.protocol.startsWith('http')) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').catch((e) => console.warn('Service worker gagal:', e));
+      navigator.serviceWorker
+        .register('sw.js', { updateViaCache: 'none' })
+        .then((reg) => reg.update().catch(() => {}))
+        .catch((e) => console.warn('Service worker gagal:', e));
+    });
+    // Pemasangan pertama kali tidak perlu dimuat ulang: yang tampil sudah baru.
+    const adaPekerjaLama = !!navigator.serviceWorker.controller;
+    let sudahMuatUlang = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!adaPekerjaLama || sudahMuatUlang) return;
+      sudahMuatUlang = true;
+      location.reload();
     });
   }
 

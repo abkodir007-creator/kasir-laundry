@@ -142,11 +142,33 @@ window.U = (function () {
     toast._t = setTimeout(() => el.classList.remove('show'), 2200);
   };
 
-  /** Modal konfirmasi berbasis <dialog>, mengembalikan Promise<boolean>. */
+  /** Modal konfirmasi berbasis <dialog>, mengembalikan Promise<boolean>.
+
+     Memakai dialog SENDIRI, terpisah dari #modal yang dipakai halaman.
+
+     Dulu keduanya berbagi satu dialog, dan itu diam-diam mematikan tombol
+     Hapus pada detail pesanan: penanganannya menutup modal detail lalu
+     langsung membuka konfirmasi, sementara peristiwa "close" dari modal
+     pertama baru tiba sesudahnya — dan langsung ditangkap oleh penunggu
+     konfirmasi yang baru. Jawabannya terbaca "Batal" padahal pemilik belum
+     menekan apa pun, jadi pesanan tidak pernah terhapus dan tidak ada pesan
+     kesalahan apa pun. */
+  const dialogKonfirmasi = () => {
+    let modal = document.getElementById('modalKonfirmasi');
+    if (!modal) {
+      modal = document.createElement('dialog');
+      modal.id = 'modalKonfirmasi';
+      modal.className = 'modal';
+      modal.innerHTML = '<form method="dialog" class="modal-inner"></form>';
+      document.body.appendChild(modal);
+    }
+    return modal;
+  };
+
   const konfirmasi = (judul, pesan, labelYa = 'Ya, lanjutkan') =>
     new Promise((resolve) => {
-      const modal = document.getElementById('modal');
-      const inner = document.getElementById('modalInner');
+      const modal = dialogKonfirmasi();
+      const inner = modal.querySelector('.modal-inner');
       inner.innerHTML = `
         <h3>${esc(judul)}</h3>
         <p class="muted">${esc(pesan)}</p>

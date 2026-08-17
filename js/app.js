@@ -221,8 +221,8 @@
         .catch(() => DB.tandaiServerSiap(false));
 
       Awan.sinkronkan(
-        (nama, isi) => {
-          DB.terapkanDariAwan(nama, isi);
+        (nama, isi, meta) => {
+          DB.terapkanDariAwan(nama, isi, meta);
           segarkanIsi();
         },
         () => {

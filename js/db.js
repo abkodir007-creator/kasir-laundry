@@ -527,7 +527,7 @@ window.DB = (function () {
 
   /** Data dari server masuk ke memori. Bentuknya sama dengan state lokal,
       jadi seluruh halaman tetap membaca seperti biasa. */
-  function terapkanDariAwan(nama, isi) {
+  function terapkanDariAwan(nama, isi, meta) {
     // Salin dulu keadaan sekarang: inilah titik paling berisiko data tertimpa.
     cadanganOtomatis();
 
@@ -541,11 +541,16 @@ window.DB = (function () {
        menyimpan datanya, data itu harus menang.
 
        Penghapusan satu-dua catatan tetap ikut tersinkron seperti biasa, karena
-       daftar yang dikirim server masih berisi. Yang ditolak hanya keadaan
-       "semua catatan hilang sekaligus" — dan itu memang tidak pernah menjadi
-       pekerjaan sehari-hari kasir. */
+       daftar yang dikirim server masih berisi.
+
+       Ada satu pengecualian yang sah: pemilik memang sengaja menghapus semua
+       catatan dari perangkat lain. Itu baru diterima kalau dua syarat terpenuhi
+       sekaligus — server sudah terbukti pernah berisi, dan kabar kosong ini
+       benar-benar datang dari server, bukan dari simpanan sementara. Dua-duanya
+       tidak akan pernah terpenuhi pada keadaan yang dulu menghapus data toko. */
     const lokalBerisi = nama === 'toko' ? true : !!(state[nama] || []).length;
-    if (kosong(isi) && lokalBerisi) return;
+    const penghapusanSah = serverSiap && meta && meta.dariServer;
+    if (kosong(isi) && lokalBerisi && !penghapusanSah) return;
 
     if (nama === 'toko') state.toko = { ...AWAL.toko, ...isi };
     else state[nama] = isi;

@@ -110,7 +110,9 @@ window.Awan = (function () {
               const isi = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
               galat = null;
               hitungTertunda(nama, snap);
-              onUbah(nama, isi);
+              // dariServer membedakan kabar sungguhan dari isi simpanan
+              // sementara; dipakai db.js sebelum menerima daftar kosong.
+              onUbah(nama, isi, { dariServer: !snap.metadata.fromCache });
               tandai();
             },
             (e) => {

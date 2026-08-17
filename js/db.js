@@ -68,8 +68,7 @@ window.DB = (function () {
     return k;
   }
 
-  let state = muat();
-  pastikanAdaOwner();
+  let state;
 
   /* Tablet tidak boleh pernah terkunci tanpa satu pun akun. Kalau daftar
      pengguna kosong — misalnya karena data server sempat masuk dalam keadaan
@@ -81,10 +80,6 @@ window.DB = (function () {
     }
   }
 
-  // Pemasangan lama menyimpan nomor di dalam state; pindahkan sekali ke lokal.
-  if (localStorage.getItem(K_NOMOR) === null) {
-    localStorage.setItem(K_NOMOR, String(state.nomorTerakhir || 0));
-  }
 
   function muat() {
     try {
@@ -106,6 +101,103 @@ window.DB = (function () {
       console.error('Gagal menyimpan data:', e);
       U.toast('Penyimpanan penuh — coba ekspor lalu hapus data lama');
     }
+    cadanganOtomatis();
+  }
+
+  /* ---------- Cadangan otomatis ----------
+
+     Jaring pengaman terakhir. Data toko pernah hilang karena satu kesalahan
+     sinkronisasi menimpa seluruh isi tablet, dan waktu itu tidak ada apa pun
+     yang bisa dipakai memulihkan. Sekarang salinan utuh disimpan terpisah dan
+     bisa dipulihkan dari halaman Pengaturan.
+
+     Tiga aturan menjaga salinan ini tetap berguna:
+
+     1. Hanya disalin dari perubahan yang dibuat di tablet ini. Data yang baru
+        turun dari server tidak pernah menimpa salinan — justru dari sanalah
+        bencana kemarin datang.
+     2. Salinan yang lebih lengkap tidak diganti oleh keadaan yang menyusut,
+        kecuali salinannya sudah sangat tua. Jadi kalau data mendadak hilang,
+        salinan lengkapnya tetap ada walau kasir sempat membuat nota baru.
+     3. Dijeda beberapa menit supaya penyimpanan tidak bekerja tiap ketukan. */
+  const K_CADANGAN = 'kasir-laundry-cadangan';
+  const JEDA_CADANGAN = 2 * 60 * 1000;
+  const UMUR_CADANGAN = 7 * 24 * 60 * 60 * 1000;
+  let waktuCadangan = 0;
+  let jumlahCadangan = 0;
+  let sedangDariAwan = false;
+
+  const jumlahCatatan = (d) =>
+    (d.pesanan || []).length + (d.pelanggan || []).length + (d.pengeluaran || []).length;
+
+  function cadanganOtomatis() {
+    if (sedangDariAwan) return;
+    if (Date.now() - waktuCadangan < JEDA_CADANGAN) return;
+
+    const jumlah = jumlahCatatan(state);
+    if (!jumlah) return;
+    const tua = Date.now() - waktuCadangan > UMUR_CADANGAN;
+    if (jumlah < jumlahCadangan && !tua) return;
+
+    try {
+      localStorage.setItem(K_CADANGAN, JSON.stringify({ waktu: new Date().toISOString(), data: state }));
+      waktuCadangan = Date.now();
+      jumlahCadangan = jumlah;
+    } catch (e) {
+      // Kuota penuh: cadangan otomatis dilewat, kasir tidak boleh terganggu.
+      console.warn('Cadangan otomatis dilewat:', e);
+    }
+  }
+
+  function bacaCadanganOtomatis() {
+    try {
+      const d = JSON.parse(localStorage.getItem(K_CADANGAN) || 'null');
+      return d && d.data && Array.isArray(d.data.pesanan) ? d : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /** Ringkasan untuk halaman Pengaturan; null kalau belum ada cadangan. */
+  function infoCadanganOtomatis() {
+    const d = bacaCadanganOtomatis();
+    if (!d) return null;
+    return {
+      waktu: d.waktu,
+      pesanan: d.data.pesanan.length,
+      pelanggan: (d.data.pelanggan || []).length,
+      pengeluaran: (d.data.pengeluaran || []).length,
+    };
+  }
+
+  function pulihkanCadanganOtomatis() {
+    const d = bacaCadanganOtomatis();
+    if (!d) throw new Error('Belum ada cadangan otomatis di tablet ini');
+    impor(JSON.stringify(d.data));
+    return infoCadanganOtomatis();
+  }
+
+  /* ---------- Penyalaan ----------
+     Dijalankan di sini, bukan di atas berkas, karena pastikanAdaOwner() bisa
+     langsung menyimpan — dan penyimpanan sudah membuat cadangan otomatis,
+     jadi seluruh keterangan cadangan di atas harus sudah siap lebih dulu. */
+  state = muat();
+
+  // Umur cadangan dihitung dari salinan yang tersimpan, bukan dari waktu
+  // aplikasi dibuka. Kalau tidak, tiap kali tablet dinyalakan salinan lama
+  // langsung tertimpa — padahal justru itu yang mungkin dibutuhkan.
+  (function umurCadangan() {
+    const d = bacaCadanganOtomatis();
+    if (!d) return;
+    waktuCadangan = new Date(d.waktu).getTime() || 0;
+    jumlahCadangan = jumlahCatatan(d.data);
+  })();
+
+  pastikanAdaOwner();
+
+  // Pemasangan lama menyimpan nomor di dalam state; pindahkan sekali ke lokal.
+  if (localStorage.getItem(K_NOMOR) === null) {
+    localStorage.setItem(K_NOMOR, String(state.nomorTerakhir || 0));
   }
 
   /* ---------- Layanan ---------- */
@@ -423,6 +515,9 @@ window.DB = (function () {
   /** Data dari server masuk ke memori. Bentuknya sama dengan state lokal,
       jadi seluruh halaman tetap membaca seperti biasa. */
   function terapkanDariAwan(nama, isi) {
+    // Salin dulu keadaan sekarang: inilah titik paling berisiko data tertimpa.
+    cadanganOtomatis();
+
     // Server kosong + tablet berisi + server belum disiapkan = jangan sentuh.
     const lokalBerisi = nama === 'toko' ? true : !!(state[nama] || []).length;
     if (!serverSiap && kosong(isi) && lokalBerisi) return;
@@ -435,7 +530,14 @@ window.DB = (function () {
       state.pengeluaran.sort((a, b) => (a.tanggal < b.tanggal ? 1 : a.tanggal > b.tanggal ? -1 : 0));
     }
     pastikanAdaOwner();
-    simpan();
+
+    // Penyimpanan ini berasal dari server, jadi tidak boleh jadi cadangan.
+    sedangDariAwan = true;
+    try {
+      simpan();
+    } finally {
+      sedangDariAwan = false;
+    }
   }
 
   const seluruhState = () => state;
@@ -450,5 +552,6 @@ window.DB = (function () {
     pengguna, cariPengguna, simpanPengguna, hapusPengguna,
     pesanan, cariPesanan, buatPesanan, ubahStatus, lunasi, hapusPesanan,
     pelanggan, bukuPelanggan, simpanPelanggan, hapusPelanggan, imporPelanggan, toko, simpanToko, ekspor, impor, resetSemua,
+    infoCadanganOtomatis, pulihkanCadanganOtomatis,
   };
 })();

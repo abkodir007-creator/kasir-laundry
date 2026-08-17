@@ -1475,6 +1475,15 @@ window.Views = (function () {
           <div class="mt"></div>
           <label class="btn btn-block" for="fileImpor">⬆️ Pulihkan dari Cadangan</label>
           <input type="file" id="fileImpor" accept="application/json,.json" hidden>
+          ${(() => {
+            const c = DB.infoCadanganOtomatis();
+            return c
+              ? `<div class="mt"></div>
+                 <button class="btn btn-block" id="btnCadanganOtomatis" type="button">↩️ Pulihkan Cadangan Otomatis</button>
+                 <small class="muted">Salinan otomatis di tablet ini: <b>${esc(U.tanggalJam(c.waktu))}</b> —
+                 ${c.pesanan} pesanan, ${c.pelanggan} pelanggan, ${c.pengeluaran} pengeluaran.</small>`
+              : '<small class="muted">Cadangan otomatis dibuat sendiri setiap jam begitu ada transaksi.</small>';
+          })()}
           <div class="mt"></div>
           <button class="btn btn-danger btn-block" id="btnReset" type="button">Hapus Semua Data</button>
           <hr style="border:0;border-top:1px solid var(--border);margin:16px 0">
@@ -1535,6 +1544,26 @@ window.Views = (function () {
         U.toast('Data berhasil dipulihkan');
         pengaturan(el);
         window.SegarkanMerek();
+      } catch (err) {
+        U.toast('Gagal memulihkan: ' + err.message);
+      }
+    });
+
+    el.querySelector('#btnCadanganOtomatis')?.addEventListener('click', async () => {
+      const c = DB.infoCadanganOtomatis();
+      const ya = await U.konfirmasi(
+        'Pulihkan cadangan otomatis?',
+        `Data tablet sekarang akan diganti dengan salinan ${U.tanggalJam(c.waktu)}
+         (${c.pesanan} pesanan, ${c.pelanggan} pelanggan, ${c.pengeluaran} pengeluaran).
+         Transaksi setelah waktu itu tidak ikut kembali.`,
+        'Ya, pulihkan'
+      );
+      if (!ya) return;
+      try {
+        DB.pulihkanCadanganOtomatis();
+        pengaturan(el);
+        window.SegarkanMerek();
+        U.toast('Cadangan otomatis dipulihkan');
       } catch (err) {
         U.toast('Gagal memulihkan: ' + err.message);
       }

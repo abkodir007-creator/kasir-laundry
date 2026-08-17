@@ -14,23 +14,27 @@
    Saat offline, semuanya jatuh ke simpanan seperti biasa. */
 const VERSI = 'kasir-laundry-v8';
 
+/* Alamat berkas harus persis sama dengan yang ditulis index.html, penanda
+   versinya sekalian, supaya yang disimpan memang yang diminta halaman. */
+const CAP = '?v=8';
+
 const BERKAS = [
   './',
   './index.html',
   './manifest.json',
-  './assets/styles.css',
   './assets/icon.svg',
-  './vendor/firebase-app-compat.js',
-  './vendor/firebase-auth-compat.js',
-  './vendor/firebase-firestore-compat.js',
-  './js/merek.js',
-  './js/awan.js',
-  './js/utils.js',
-  './js/auth.js',
-  './js/db.js',
-  './js/receipt.js',
-  './js/views.js',
-  './js/app.js',
+  './assets/styles.css' + CAP,
+  './vendor/firebase-app-compat.js' + CAP,
+  './vendor/firebase-auth-compat.js' + CAP,
+  './vendor/firebase-firestore-compat.js' + CAP,
+  './js/merek.js' + CAP,
+  './js/awan.js' + CAP,
+  './js/utils.js' + CAP,
+  './js/auth.js' + CAP,
+  './js/db.js' + CAP,
+  './js/receipt.js' + CAP,
+  './js/views.js' + CAP,
+  './js/app.js' + CAP,
 ];
 
 self.addEventListener('install', (e) => {

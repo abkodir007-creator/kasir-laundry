@@ -106,8 +106,17 @@
      transaksi yang belum sampai ke server. */
   const status = document.getElementById('netStatus');
   let tertunda = 0;
+  let galatServer = null;
   function perbaruiStatus() {
     const online = navigator.onLine;
+    if (DB.pakaiAwanAktif() && galatServer) {
+      // Kegagalan server tidak boleh diam-diam. Kalau aturan Firestore
+      // menolak akun ini, datanya tetap tampil dari simpanan tablet dan
+      // semuanya terlihat normal — padahal tidak ada yang terkirim.
+      status.textContent = 'Server menolak';
+      status.className = 'pill pill-danger';
+      return;
+    }
     if (!DB.pakaiAwanAktif()) {
       /* Sengaja tidak pernah hijau. Sebelumnya di sini tertulis "Tersambung"
          yang cuma berarti ada internet, sehingga perangkat yang belum masuk
@@ -120,6 +129,9 @@
     if (tertunda > 0) {
       status.textContent = `${tertunda} menunggu kirim`;
       status.className = 'pill pill-warn';
+    } else if (!Awan.sudahSiap()) {
+      status.textContent = 'Menyambungkan…';
+      status.className = 'pill pill-muted';
     } else if (!online) {
       status.textContent = 'Offline, tersimpan';
       status.className = 'pill pill-warn';
@@ -181,10 +193,20 @@
         DB.pakaiAwan(false);
         Awan.hentikan();
         Auth.kunci();
+        galatServer = null;
+        tertunda = 0;
+        perbaruiStatus();
         mintaAkunToko();
         return;
       }
       DB.pakaiAwan(true);
+      galatServer = null;
+      /* Wajib digambar ulang di sini. Sebelumnya status hanya ikut berubah
+         saat jumlah kiriman tertunda berubah — dan kalau tidak ada yang
+         tertunda, angkanya tetap nol, jadi tulisannya tidak pernah diperbarui.
+         Akibatnya tablet yang sudah tersambung tetap menampilkan "Tanpa
+         server" seolah datanya tidak ke mana-mana. */
+      perbaruiStatus();
 
       /* Cari tahu dulu apakah server sudah pernah diisi. Selama belum, data
          kosong dari server tidak boleh menimpa isi tablet — lihat catatan di
@@ -203,9 +225,13 @@
           DB.terapkanDariAwan(nama, isi);
           segarkanIsi();
         },
-        () => segarkanIsi(),
+        () => {
+          segarkanIsi();
+          perbaruiStatus();
+        },
         (s) => {
           tertunda = s.tertunda;
+          galatServer = s.galat || null;
           perbaruiStatus();
         }
       );

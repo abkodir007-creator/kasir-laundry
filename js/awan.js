@@ -36,6 +36,8 @@ window.Awan = (function () {
   let onUbah = () => {};
   let onStatus = () => {};
   let tertunda = 0;
+  let tertundaPer = {};   // per koleksi, lihat catatan di hitungTertunda
+  let galat = null;       // pesan kegagalan terakhir dari server, mis. akses ditolak
 
   const tersedia = () => typeof firebase !== 'undefined' && !!firebase.initializeApp;
 
@@ -84,6 +86,9 @@ window.Awan = (function () {
     onStatus = kabariStatus || (() => {});
     hentikan();
     siap = false;
+    galat = null;
+    tertundaPer = {};
+    tertunda = 0;
 
     let selesai = 0;
     const total = KOLEKSI.length + 1;
@@ -103,12 +108,15 @@ window.Awan = (function () {
             { includeMetadataChanges: true },
             (snap) => {
               const isi = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
-              hitungTertunda(snap);
+              galat = null;
+              hitungTertunda(nama, snap);
               onUbah(nama, isi);
               tandai();
             },
             (e) => {
               console.error('Gagal memantau', nama, e);
+              galat = e.code || 'gagal';
+              kabarkanStatus();
               tandai();
             }
           )
@@ -123,18 +131,36 @@ window.Awan = (function () {
           if (d.toko) onUbah('toko', d.toko);
           tandai();
         },
-        () => tandai()
+        (e) => {
+          console.error('Gagal memantau dokumen toko', e);
+          galat = e.code || 'gagal';
+          kabarkanStatus();
+          tandai();
+        }
       )
     );
   }
 
-  function hitungTertunda(snap) {
-    const jumlah = snap.docs.filter((d) => d.metadata.hasPendingWrites).length;
-    if (jumlah !== tertunda) {
-      tertunda = jumlah;
-      onStatus({ tertunda, online: navigator.onLine });
-    }
+  /* Selalu mengabari, bukan hanya saat angkanya berubah.
+
+     Versi sebelumnya hanya mengabari kalau jumlah kiriman tertunda berubah.
+     Karena angkanya biasanya nol dan tetap nol, tampilan status tidak pernah
+     ikut diperbarui — tablet yang sudah tersambung tetap menulis "Tanpa
+     server". Memanggil ini tiap kali jauh lebih murah daripada satu jam
+     mengira data tidak terkirim. */
+  function hitungTertunda(nama, snap) {
+    /* Dihitung per koleksi lalu dijumlahkan.
+
+       Sebelumnya satu angka dipakai bersama, jadi tiap kali koleksi lain
+       mengabarkan "nol tertunda" angkanya ikut jadi nol — nota yang belum
+       terkirim pun tampak sudah aman. Ketahuan lewat Firebase tiruan: satu
+       nota tertunda tetap tertulis "Tersinkron". */
+    tertundaPer[nama] = snap.docs.filter((d) => d.metadata.hasPendingWrites).length;
+    tertunda = Object.values(tertundaPer).reduce((a, b) => a + b, 0);
+    kabarkanStatus();
   }
+
+  const kabarkanStatus = () => onStatus({ tertunda, online: navigator.onLine, galat });
 
   function hentikan() {
     pendengar.forEach((lepas) => {

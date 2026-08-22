@@ -99,6 +99,13 @@
 
   document.getElementById('btnKunci').addEventListener('click', () => {
     Auth.kunci();
+    /* Kalau akun toko belum aktif, layar yang benar adalah login toko — bukan
+       layar PIN. Tanpa penjagaan ini, tombol Kunci menjadi jalan pintas ke
+       layar PIN bagi siapa pun yang memegang tablet. */
+    if (adaAwan && !Awan.akun()) {
+      mintaAkunToko();
+      return;
+    }
     mintaMasuk();
   });
 

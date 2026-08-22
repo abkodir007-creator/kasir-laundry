@@ -109,10 +109,65 @@ window.Auth = (function () {
     }
   }
 
+  /* ---------- Penahan tebakan PIN ----------
+
+     PIN hanya 4-6 angka, jadi tanpa penahan siapa pun yang sempat memegang
+     tablet bisa mencobanya berkali-kali sampai tembus. Setelah lima kali
+     salah, layar PIN menutup diri untuk waktu yang makin lama.
+
+     Disimpan di localStorage, bukan di memori, supaya menutup aplikasi atau
+     memuat ulang halaman tidak mengembalikan jatah percobaan. */
+  const K_GAGAL = 'kasir-laundry-gagal';
+  const BATAS_BEBAS = 5;              // percobaan pertama yang tidak dihukum
+  const JEDA_DASAR = 60 * 1000;       // penambahan tiap kali salah sesudahnya
+  const JEDA_MAKS = 10 * 60 * 1000;   // tidak pernah lebih lama dari ini
+
+  function bacaGagal() {
+    try {
+      return JSON.parse(localStorage.getItem(K_GAGAL) || 'null') || { gagal: 0, sampai: 0 };
+    } catch (e) {
+      return { gagal: 0, sampai: 0 };
+    }
+  }
+
+  /** Sisa waktu tunggu dalam milidetik; 0 berarti boleh mencoba. */
+  function sisaTunggu() {
+    return Math.max(0, (bacaGagal().sampai || 0) - Date.now());
+  }
+
+  function catatGagal() {
+    const d = bacaGagal();
+    d.gagal = (d.gagal || 0) + 1;
+    if (d.gagal > BATAS_BEBAS) {
+      d.sampai = Date.now() + Math.min(JEDA_DASAR * (d.gagal - BATAS_BEBAS), JEDA_MAKS);
+    }
+    try {
+      localStorage.setItem(K_GAGAL, JSON.stringify(d));
+    } catch (e) {
+      /* penyimpanan penuh: penahan dilewat, jangan sampai kasir ikut terkunci */
+    }
+  }
+
+  const resetGagal = () => {
+    try {
+      localStorage.removeItem(K_GAGAL);
+    } catch (e) {
+      /* diabaikan */
+    }
+  };
+
   function masuk(id, pin) {
+    if (sisaTunggu() > 0) return false;
     const u = DB.cariPengguna(id);
-    if (!u || u.aktif === false) return false;
-    if (hashPin(pin, u.garam) !== u.hash) return false;
+    if (!u || u.aktif === false) {
+      catatGagal();
+      return false;
+    }
+    if (hashPin(pin, u.garam) !== u.hash) {
+      catatGagal();
+      return false;
+    }
+    resetGagal();
     sessionStorage.setItem(KUNCI_SESI, u.id);
     return true;
   }
@@ -224,20 +279,54 @@ window.Auth = (function () {
       titik.innerHTML = Array.from({ length: 6 }, (_, i) => `<span class="${i < pin.length ? 'isi' : ''}"></span>`).join('');
     }
 
+    /* Hitung mundur saat layar sedang menutup diri. Dibersihkan sendiri
+       begitu layarnya diganti, supaya tidak ada penghitung yang tertinggal
+       jalan di latar belakang. */
+    let jamTunggu = null;
+    function sedangDitahan() {
+      if (!pesan.isConnected) {
+        clearInterval(jamTunggu);
+        jamTunggu = null;
+        return true;
+      }
+      const sisa = sisaTunggu();
+      if (sisa > 0) {
+        pesan.textContent = `Terlalu banyak percobaan. Tunggu ${Math.ceil(sisa / 1000)} detik.`;
+        if (!jamTunggu) jamTunggu = setInterval(sedangDitahan, 1000);
+        return true;
+      }
+      if (jamTunggu) {
+        clearInterval(jamTunggu);
+        jamTunggu = null;
+        pesan.innerHTML = '&nbsp;';
+      }
+      return false;
+    }
+
     function coba() {
       if (!dipilih) return;
+      if (sedangDitahan()) {
+        // Angka yang telanjur diketik dibuang, supaya percobaan berikutnya
+        // tidak menyambung ke sisa ketikan lama dan ikut dihitung salah.
+        pin = '';
+        gambarTitik();
+        return;
+      }
       if (pin.length < 4) {
         pesan.textContent = 'PIN minimal 4 angka.';
         return;
       }
       if (masuk(dipilih, pin)) {
+        clearInterval(jamTunggu);
         onMasuk();
       } else {
         pin = '';
         gambarTitik();
-        pesan.textContent = 'PIN salah. Coba lagi.';
+        if (!sedangDitahan()) pesan.textContent = 'PIN salah. Coba lagi.';
       }
     }
+
+    sedangDitahan();
 
     el.querySelector('#masukOrang').addEventListener('click', (e) => {
       const b = e.target.closest('[data-user]');
@@ -281,5 +370,5 @@ window.Auth = (function () {
     gambarTitik();
   }
 
-  return { sha256, garamBaru, hashPin, boleh, isOwner, aktif, masuk, kunci, layarMasuk, layarToko, AKSES_PEGAWAI };
+  return { sha256, garamBaru, hashPin, boleh, isOwner, aktif, masuk, kunci, layarMasuk, layarToko, AKSES_PEGAWAI, sisaTunggu };
 })();

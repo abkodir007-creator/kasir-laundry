@@ -281,6 +281,16 @@ tbody tr:last-child td { border-bottom: 0; }
 .pin-titik span.isi { background: var(--aksen); border-color: var(--aksen); }
 .masuk-pesan { text-align: center; margin: 0 0 14px; font-size: 14px; min-height: 20px; }
 
+.tautan-lupa {
+  display: block; width: 100%; margin: 14px 0 0; padding: 8px;
+  border: 0; background: none; color: var(--muted);
+  font: inherit; font-size: 14px; text-decoration: underline; cursor: pointer;
+}
+.tautan-lupa:hover { color: var(--text); }
+.sep-lupa { border-top: 1px solid var(--border); margin: 14px 0; }
+.lupa { text-align: left; }
+.lupa .field { margin-bottom: 10px; }
+
 .tombol-angka { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .tombol-angka button {
   min-height: 62px;

@@ -70,6 +70,30 @@ window.Awan = (function () {
     await auth.signInWithEmailAndPassword(String(email).trim(), String(sandi));
   }
 
+  /* Memeriksa kata sandi akun toko tanpa mengganggu sesi yang sedang jalan.
+
+     Dipakai untuk mengatur ulang PIN yang lupa. Sengaja diperiksa ke server,
+     bukan ke sesuatu yang tersimpan di tablet: kalau jawabannya ada di tablet,
+     siapa pun yang memegang tablet bisa menemukannya. */
+  async function periksaSandiToko(email, sandi) {
+    mulai();
+    if (!auth) throw new Error('Layanan akun tidak tersedia di perangkat ini');
+    const bersih = String(email).trim();
+    const sekarang = auth.currentUser;
+
+    if (sekarang) {
+      if (sekarang.email && sekarang.email.toLowerCase() !== bersih.toLowerCase()) {
+        throw new Error('Email itu bukan akun toko yang dipakai perangkat ini');
+      }
+      const kredensial = firebase.auth.EmailAuthProvider.credential(bersih, String(sandi));
+      await sekarang.reauthenticateWithCredential(kredensial);
+      return sekarang;
+    }
+
+    const hasil = await auth.signInWithEmailAndPassword(bersih, String(sandi));
+    return hasil.user;
+  }
+
   async function keluarToko() {
     hentikan();
     if (auth) await auth.signOut();
@@ -243,7 +267,7 @@ window.Awan = (function () {
 
   return {
     KONFIG, TOKO, KOLEKSI,
-    tersedia, mulai, akun, pantauAkun, masukToko, keluarToko,
+    tersedia, mulai, akun, pantauAkun, masukToko, keluarToko, periksaSandiToko,
     sinkronkan, hentikan, tulis, hapus, tulisToko, unggahSemua, serverBerisi,
     aktif, sudahSiap, jumlahTertunda,
   };

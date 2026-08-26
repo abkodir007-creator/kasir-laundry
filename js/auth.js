@@ -269,6 +269,27 @@ window.Auth = (function () {
             <button type="button" data-angka="0">0</button>
             <button type="button" data-aksi="masuk" class="btn-primary">Masuk</button>
           </div>
+
+          <button type="button" class="tautan-lupa" id="btnLupaPin">Lupa PIN?</button>
+
+          <form class="lupa" id="panelLupa" hidden>
+            <div class="sep-lupa"></div>
+            <p class="muted" style="margin-top:0">Masukkan email dan kata sandi <b>akun toko</b>
+            (yang dipakai saat menghubungkan aplikasi ke server), lalu tentukan PIN baru untuk
+            <b id="lupaNama"></b>.</p>
+            <div class="field"><label for="lupaEmail">Email akun toko</label>
+              <input class="input" type="email" id="lupaEmail" autocomplete="username"></div>
+            <div class="field"><label for="lupaSandi">Kata sandi akun toko</label>
+              <input class="input" type="password" id="lupaSandi" autocomplete="current-password"></div>
+            <div class="field"><label for="lupaPin">PIN baru (4-6 angka)</label>
+              <input class="input" type="password" id="lupaPin" inputmode="numeric" maxlength="6"></div>
+            <div class="field"><label for="lupaPin2">Ulangi PIN baru</label>
+              <input class="input" type="password" id="lupaPin2" inputmode="numeric" maxlength="6"></div>
+            <p class="masuk-pesan muted" id="lupaPesan">&nbsp;</p>
+            <button class="btn btn-primary btn-block" id="lupaKirim" type="submit">Atur ulang PIN</button>
+            <div class="mt"></div>
+            <button class="btn btn-block" id="lupaBatal" type="button">Batal</button>
+          </form>
         </div>
       </div>`;
 
@@ -327,6 +348,105 @@ window.Auth = (function () {
     }
 
     sedangDitahan();
+
+    /* ---------- Lupa PIN ----------
+
+       Satu-satunya jalan masuk kalau PIN owner terlupakan. Sengaja dikunci ke
+       kata sandi akun toko, yang diperiksa ke server:
+
+       - Tidak ada kode induk tetap yang tertanam di aplikasi. Kode semacam itu
+         akan berlaku selamanya di semua perangkat, dan sekali bocor tidak bisa
+         ditarik kembali.
+       - Memulihkan cadangan tidak menolong, karena cadangan ikut membawa PIN
+         lama yang justru sedang terlupakan.
+       - Menghapus data aplikasi juga tidak menolong: daftar pengguna akan
+         turun lagi dari server berikut PIN lamanya.
+
+       Karena diperiksa ke server, cara ini butuh internet — dan itu memang
+       disengaja: pegawai yang memegang tablet tanpa tahu kata sandi toko
+       tetap tidak bisa lewat. */
+    const panel = el.querySelector('#panelLupa');
+    const tombolLupa = el.querySelector('#btnLupaPin');
+    const lupaPesan = el.querySelector('#lupaPesan');
+    const adaAwan = typeof Awan !== 'undefined' && Awan.tersedia();
+
+    function namaTerpilih() {
+      return daftar.find((u) => u.id === dipilih)?.nama || 'akun ini';
+    }
+
+    tombolLupa.addEventListener('click', () => {
+      el.querySelector('#lupaNama').textContent = namaTerpilih();
+      panel.hidden = false;
+      tombolLupa.hidden = true;
+      lupaPesan.innerHTML = '&nbsp;';
+      if (!adaAwan) {
+        lupaPesan.textContent = 'Versi ini berjalan tanpa server, jadi PIN tidak bisa diatur ulang dari sini.';
+      } else if (Awan.akun()?.email) {
+        el.querySelector('#lupaEmail').value = Awan.akun().email;
+      }
+      el.querySelector('#lupaSandi').focus();
+    });
+
+    el.querySelector('#lupaBatal').addEventListener('click', () => {
+      panel.hidden = true;
+      tombolLupa.hidden = false;
+      panel.reset();
+    });
+
+    panel.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!dipilih) {
+        lupaPesan.textContent = 'Pilih dulu nama yang PIN-nya mau diatur ulang.';
+        return;
+      }
+      const pinBaru = el.querySelector('#lupaPin').value.trim();
+      const ulang = el.querySelector('#lupaPin2').value.trim();
+      if (!/^[0-9]{4,6}$/.test(pinBaru)) {
+        lupaPesan.textContent = 'PIN baru harus 4 sampai 6 angka.';
+        return;
+      }
+      if (pinBaru !== ulang) {
+        lupaPesan.textContent = 'Ulangan PIN belum sama.';
+        return;
+      }
+      if (!adaAwan) {
+        lupaPesan.textContent = 'Versi ini berjalan tanpa server, jadi PIN tidak bisa diatur ulang dari sini.';
+        return;
+      }
+      if (!navigator.onLine) {
+        lupaPesan.textContent = 'Perlu internet untuk memeriksa kata sandi akun toko.';
+        return;
+      }
+
+      const kirim = el.querySelector('#lupaKirim');
+      kirim.disabled = true;
+      lupaPesan.textContent = 'Memeriksa kata sandi…';
+      try {
+        await Awan.periksaSandiToko(el.querySelector('#lupaEmail').value, el.querySelector('#lupaSandi').value);
+        const u = DB.cariPengguna(dipilih);
+        DB.simpanPengguna({ id: u.id, nama: u.nama, peran: u.peran, pin: pinBaru });
+        // Hitungan salah PIN ikut dinolkan, kalau tidak pemilik baru saja
+        // mengatur ulang PIN tapi tetap tidak boleh masuk selama masa tunggu.
+        resetGagal();
+        panel.hidden = true;
+        tombolLupa.hidden = false;
+        panel.reset();
+        pin = '';
+        gambarTitik();
+        pesan.textContent = 'PIN berhasil diatur ulang. Silakan masuk dengan PIN baru.';
+      } catch (err) {
+        const kode = err.code || '';
+        lupaPesan.textContent = /wrong-password|invalid-credential|invalid-login/.test(kode)
+          ? 'Kata sandi akun toko salah.'
+          : /user-not-found|invalid-email/.test(kode)
+            ? 'Email akun toko tidak dikenali.'
+            : /too-many-requests/.test(kode)
+              ? 'Terlalu banyak percobaan. Coba lagi beberapa menit lagi.'
+              : 'Gagal memeriksa: ' + (err.message || kode);
+      } finally {
+        kirim.disabled = false;
+      }
+    });
 
     el.querySelector('#masukOrang').addEventListener('click', (e) => {
       const b = e.target.closest('[data-user]');

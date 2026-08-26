@@ -44,6 +44,149 @@ window.U = (function () {
     return d;
   };
 
+  /* Pemecah baris CSV yang menghormati tanda kutip.
+
+     Pemecah sederhana dengan split(',') memotong nilai yang memang berisi
+     koma — misalnya layanan bernama "Cuci, Setrika" atau harga "12.500,00"
+     hasil ekspor Excel. Berkas ekspor aplikasi ini sendiri memberi tanda
+     kutip pada nilai semacam itu, jadi tanpa ini hasil ekspor tidak bisa
+     dibaca kembali oleh impornya sendiri. */
+  const pisahBaris = (baris) => {
+    const sep = baris.includes('\t') ? '\t' : baris.includes(';') ? ';' : baris.includes(',') ? ',' : null;
+    if (!sep) return [baris.trim()];
+
+    const kolom = [];
+    let kini = '';
+    let dalamKutip = false;
+
+    for (let i = 0; i < baris.length; i++) {
+      const c = baris[i];
+      if (c === '"') {
+        if (dalamKutip && baris[i + 1] === '"') {   // "" di dalam kutip = satu kutip
+          kini += '"';
+          i += 1;
+        } else {
+          dalamKutip = !dalamKutip;
+        }
+      } else if (c === sep && !dalamKutip) {
+        kolom.push(kini.trim());
+        kini = '';
+      } else {
+        kini += c;
+      }
+    }
+    kolom.push(kini.trim());
+    return kolom;
+  };
+
+  /* Membaca daftar layanan dari tempelan teks: CSV berjudul, salinan dari
+     Excel (dipisah tab), titik koma, atau ketikan bebas "Nama, harga".
+
+     Ditulis longgar dengan sengaja. Daftar layanan biasanya datang dari
+     aplikasi kasir sebelumnya, dan bentuknya tidak pernah bisa ditebak —
+     lebih baik menerima banyak bentuk lalu memperlihatkan pratinjau sebelum
+     data benar-benar masuk. */
+  const uraiLayanan = (teks) => {
+    const barisan = String(teks || '').split(/\r?\n/).map((b) => b.trim()).filter(Boolean);
+    if (!barisan.length) return { data: [], dilewati: 0 };
+
+    const pisah = pisahBaris;
+
+    /* Angka harga bisa datang dalam banyak bentuk: "Rp 12.500", "12,500",
+       "12.500,00", atau "12500".
+
+       Aturan "pemisah terakhir adalah desimal" TIDAK bisa dipakai sendirian
+       di sini. Dengan aturan itu "Rp 15.000" terbaca 15 — ketahuan waktu
+       menguji impor dari daftar harga gaya Indonesia. Maka: pemisah yang
+       diikuti tepat tiga angka, atau muncul lebih dari sekali, selalu
+       dianggap pemisah ribuan. */
+    const keAngka = (v) => {
+      const bersih = String(v || '').replace(/[^0-9,.-]/g, '');
+      if (!bersih) return NaN;
+
+      const punyaKoma = bersih.includes(',');
+      const punyaTitik = bersih.includes('.');
+
+      if (punyaKoma && punyaTitik) {
+        // Dua-duanya ada: yang terakhir pasti desimal, yang lain ribuan.
+        const desimal = bersih.lastIndexOf(',') > bersih.lastIndexOf('.') ? ',' : '.';
+        const ribuan = desimal === ',' ? '.' : ',';
+        return Number(bersih.split(ribuan).join('').replace(desimal, '.'));
+      }
+
+      const tanda = punyaKoma ? ',' : punyaTitik ? '.' : null;
+      if (!tanda) return Number(bersih);
+
+      const bagian = bersih.split(tanda);
+      const ribuan = bagian.length > 2 || bagian[bagian.length - 1].length === 3;
+      return ribuan ? Number(bagian.join('')) : Number(bagian.join('.'));
+    };
+
+    let kNama = 0;
+    let kHarga = 1;
+    let kSatuan = -1;
+    let kDurasi = -1;
+    let mulai = 0;
+
+    const kepala = pisah(barisan[0]).map((x) => x.toLowerCase());
+    if (kepala.length > 1) {
+      const iNama = kepala.findIndex((x) => /nama|layanan|service|item|produk|jenis/.test(x));
+      const iHarga = kepala.findIndex((x) => /harga|tarif|price|biaya/.test(x));
+      const iSatuan = kepala.findIndex((x) => /satuan|unit|uom/.test(x));
+      const iDurasi = kepala.findIndex((x) => /durasi|estimasi|lama|hari|day/.test(x));
+      if (iNama >= 0 || iHarga >= 0) {
+        kNama = iNama >= 0 ? iNama : 0;
+        kHarga = iHarga >= 0 ? iHarga : 1;
+        kSatuan = iSatuan;
+        kDurasi = iDurasi;
+        mulai = 1;
+      }
+    }
+
+    const data = [];
+    let dilewati = 0;
+
+    for (let i = mulai; i < barisan.length; i++) {
+      const kolom = pisah(barisan[i]);
+      const nama = (kolom[kNama] || '').trim();
+      let harga = keAngka(kolom[kHarga]);
+
+      // Tanpa judul dan hanya satu kolom: cari angka di ujung baris.
+      if (kolom.length === 1) {
+        const cocok = nama.match(/^(.*?)[\s:=-]+((?:rp\s*)?[\d.,]+)$/i);
+        if (cocok) {
+          data.push(rapikanLayanan(cocok[1], keAngka(cocok[2]), '', ''));
+          continue;
+        }
+        dilewati += 1;
+        continue;
+      }
+
+      if (!nama || !isFinite(harga)) {
+        dilewati += 1;
+        continue;
+      }
+      data.push(rapikanLayanan(nama, harga, kSatuan >= 0 ? kolom[kSatuan] : '', kDurasi >= 0 ? kolom[kDurasi] : ''));
+    }
+
+    return { data: data.filter(Boolean), dilewati: dilewati + (data.length - data.filter(Boolean).length) };
+  };
+
+  function rapikanLayanan(nama, harga, satuan, durasi) {
+    const bersihNama = String(nama || '').trim().replace(/^["\u2018\u2019]|["\u2018\u2019]$/g, '');
+    if (!bersihNama || !isFinite(harga) || harga < 0) return null;
+    const s = String(satuan || '').toLowerCase();
+    const hari = parseInt(String(durasi || '').replace(/[^0-9]/g, ''), 10);
+    return {
+      nama: bersihNama.slice(0, 60),
+      harga: Math.round(harga),
+      // pcs dipakai kalau memang tertulis begitu; selain itu kg, satuan
+      // paling lazim di laundry.
+      satuan: /pcs|pc|buah|potong|item|unit|lembar|set/.test(s) ? 'pcs' : 'kg',
+      durasi: hari > 0 && hari < 60 ? hari : 2,
+    };
+  }
+
   /** Urai daftar kontak jadi [{nama, hp}].
 
       Sengaja longgar karena daftar pelanggan bisa datang dari mana saja:
@@ -54,11 +197,7 @@ window.U = (function () {
     const barisan = String(teks || '').split(/\r?\n/).map((b) => b.trim()).filter(Boolean);
     if (!barisan.length) return { data: [], dilewati: 0 };
 
-    const pisah = (b) => {
-      const sep = b.includes('\t') ? '\t' : b.includes(';') ? ';' : b.includes(',') ? ',' : null;
-      if (!sep) return [b];
-      return b.split(sep).map((x) => x.trim().replace(/^"(.*)"$/, '$1').trim());
-    };
+    const pisah = pisahBaris;
 
     // Deteksi baris judul supaya kolom tidak tertukar.
     let kNama = 0;
@@ -181,5 +320,5 @@ window.U = (function () {
       modal.addEventListener('close', () => resolve(modal.returnValue === 'ya'), { once: true });
     });
 
-  return { rupiah, angka, tanggal, jam, tanggalJam, hariKunci, hariIni, tambahHari, idBaru, esc, waNomor, uraiKontak, bacaGambarKecil, toast, konfirmasi };
+  return { rupiah, angka, tanggal, jam, tanggalJam, hariKunci, hariIni, tambahHari, idBaru, esc, waNomor, uraiKontak, uraiLayanan, bacaGambarKecil, toast, konfirmasi };
 })();

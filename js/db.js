@@ -230,6 +230,38 @@ window.DB = (function () {
     catat('layanan', data.id ? cariLayanan(data.id) : state.layanan[state.layanan.length - 1]);
   }
 
+  /** Masukkan banyak layanan sekaligus. Nama yang sudah ada dilewati, bukan
+      ditimpa: daftar impor sering memuat ulang nama yang sama, dan harga yang
+      sudah disesuaikan pemilik tidak boleh mundur diam-diam. */
+  function imporLayanan(daftar) {
+    const adaNama = new Set(state.layanan.map((l) => l.nama.trim().toLowerCase()));
+    let masuk = 0;
+    let dilewati = 0;
+
+    for (const l of daftar || []) {
+      const kunci = String(l.nama || '').trim().toLowerCase();
+      if (!kunci || adaNama.has(kunci)) {
+        dilewati += 1;
+        continue;
+      }
+      adaNama.add(kunci);
+      const baru = {
+        id: U.idBaru(),
+        nama: l.nama.trim(),
+        satuan: l.satuan === 'pcs' ? 'pcs' : 'kg',
+        harga: Math.max(0, Math.round(Number(l.harga) || 0)),
+        durasi: Math.max(1, Number(l.durasi) || 2),
+        aktif: l.aktif !== false,
+      };
+      state.layanan.push(baru);
+      catat('layanan', baru);
+      masuk += 1;
+    }
+
+    if (masuk) simpan();
+    return { masuk, dilewati };
+  }
+
   function hapusLayanan(id) {
     state.layanan = state.layanan.filter((l) => l.id !== id);
     simpan();
@@ -580,7 +612,7 @@ window.DB = (function () {
     tandaiServerSiap, serverSudahSiap: () => serverSiap,
     layananDipulihkan: () => layananDipulihkan,
     pengeluaran, cariPengeluaran, simpanPengeluaran, hapusPengeluaran,
-    layanan, layananAktif, cariLayanan, simpanLayanan, hapusLayanan,
+    layanan, layananAktif, cariLayanan, simpanLayanan, hapusLayanan, imporLayanan,
     pengguna, cariPengguna, simpanPengguna, hapusPengguna,
     pesanan, cariPesanan, buatPesanan, ubahStatus, lunasi, hapusPesanan,
     pelanggan, bukuPelanggan, simpanPelanggan, hapusPelanggan, imporPelanggan, toko, simpanToko, ekspor, impor, resetSemua,

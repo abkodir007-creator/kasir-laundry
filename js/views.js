@@ -104,9 +104,12 @@ window.Views = (function () {
       const t = new Date(iso);
       return t >= bulan.dari && t <= bulan.sampai;
     };
-    const omzetBulan = semua.filter((p) => dalamBulan(p.dibuat)).reduce((a, p) => a + p.total, 0);
+    const bulanIni = semua.filter((p) => dalamBulan(p.dibuat));
+    const omzetBulan = bulanIni.reduce((a, p) => a + p.total, 0);
+    const diterimaBulan = bulanIni.reduce((a, p) => a + p.dibayar, 0);
     const keluarBulan = DB.pengeluaran().filter((x) => dalamBulan(x.tanggal + 'T12:00:00')).reduce((a, x) => a + x.jumlah, 0);
-    const labaBulan = omzetBulan - keluarBulan;
+    // Sama persis dengan Laporan: laba kotor (uang diterima) dikurangi pengeluaran.
+    const labaBulan = diterimaBulan - keluarBulan;
 
     // Tujuh hari terakhir, hari ini paling kanan.
     const HARI = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
@@ -171,7 +174,7 @@ window.Views = (function () {
               tile(
                 labaBulan < 0 ? 'Rugi bulan ini' : 'Laba bulan ini',
                 U.rupiah(Math.abs(labaBulan)),
-                `omzet ${U.rupiah(omzetBulan)} \u2212 keluar ${U.rupiah(keluarBulan)}`,
+                `diterima ${U.rupiah(diterimaBulan)} \u2212 keluar ${U.rupiah(keluarBulan)}`,
                 labaBulan < 0 ? 'stat-rugi' : ''
               ) +
               tile('Belum dibayar', U.rupiah(piutang), `${belumLunas.length} nota`) +
@@ -863,9 +866,32 @@ window.Views = (function () {
       const terbayar = daftar.reduce((a, p) => a + p.dibayar, 0);
       const piutang = omzet - terbayar;
       const totalKeluar = keluar.reduce((a, x) => a + x.jumlah, 0);
-      const laba = omzet - totalKeluar;                 // laba bersih: semua pesanan dihitung
-      const labaKotor = terbayar - totalKeluar;         // laba kotor: piutang dikeluarkan dulu
+
+      /* Rumus laba mengikuti urutan pembukuan yang lazim:
+
+           laba kotor  = uang yang benar-benar diterima (omzet dikurangi piutang)
+           laba bersih = laba kotor dikurangi pengeluaran
+
+         Versi sebelumnya memakai laba bersih = omzet − pengeluaran, sehingga
+         pesanan yang belum dibayar ikut terhitung sebagai laba. Angkanya jadi
+         lebih besar daripada uang yang benar-benar ada di laci. */
+      const labaKotor = terbayar;
+      const laba = labaKotor - totalKeluar;
       const belumAmbil = DB.pesanan().filter((p) => p.status !== 'diambil').length;
+
+      /* Pemasukan dipisah per cara bayar. Yang dijumlahkan adalah uang yang
+         sudah diterima, bukan nilai nota — nota yang belum dibayar tidak boleh
+         muncul sebagai uang masuk di mana pun. */
+      const NAMA_METODE = { tunai: 'Tunai', transfer: 'Transfer', qris: 'QRIS' };
+      const perMetode = new Map();
+      for (const p of daftar) {
+        if (!p.dibayar) continue;
+        const m = p.metode || 'tunai';
+        perMetode.set(m, (perMetode.get(m) || 0) + p.dibayar);
+      }
+      const tunai = perMetode.get('tunai') || 0;
+      const nonTunai = terbayar - tunai;
+      const metodeUrut = [...perMetode.entries()].sort((a, b) => b[1] - a[1]);
 
       const perKategori = new Map();
       for (const x of keluar) perKategori.set(x.kategori, (perKategori.get(x.kategori) || 0) + x.jumlah);
@@ -900,13 +926,19 @@ window.Views = (function () {
           <div class="stat ${laba < 0 ? 'stat-rugi' : 'stat-hero'}">
             <div class="stat-label">${laba < 0 ? 'Rugi bersih' : 'Laba bersih'}</div>
             <div class="stat-value">${U.rupiah(Math.abs(laba))}</div>
-            <div class="stat-note">omzet − pengeluaran</div>
+            <div class="stat-note">laba kotor − pengeluaran</div>
           </div>
-          <div class="stat ${labaKotor < 0 ? 'stat-rugi' : ''}">
-            <div class="stat-label">${labaKotor < 0 ? 'Rugi kotor' : 'Laba kotor'}</div>
-            <div class="stat-value">${U.rupiah(Math.abs(labaKotor))}</div>
-            <div class="stat-note">setelah dikurangi piutang</div>
+          <div class="stat">
+            <div class="stat-label">Laba kotor</div>
+            <div class="stat-value">${U.rupiah(labaKotor)}</div>
+            <div class="stat-note">uang yang sudah diterima</div>
           </div>
+          <div class="stat"><div class="stat-label">Pemasukan tunai</div>
+            <div class="stat-value">${U.rupiah(tunai)}</div>
+            <div class="stat-note">masuk ke laci</div></div>
+          <div class="stat"><div class="stat-label">Pemasukan non-tunai</div>
+            <div class="stat-value">${U.rupiah(nonTunai)}</div>
+            <div class="stat-note">transfer &amp; QRIS</div></div>
           <div class="stat"><div class="stat-label">Omzet</div><div class="stat-value">${U.rupiah(omzet)}</div>
             <div class="stat-note">${daftar.length} pesanan</div></div>
           <div class="stat"><div class="stat-label">Pengeluaran</div><div class="stat-value">${U.rupiah(totalKeluar)}</div>
@@ -917,24 +949,57 @@ window.Views = (function () {
             <div class="stat-note">seluruh periode</div></div>
         </div>
 
-        <div class="card card-pad" style="margin-bottom:16px">
-          <b>Bedanya laba bersih dan laba kotor di sini</b>
-          <div class="table-wrap mt"><table>
-            <tbody>
-              <tr><td><b>Laba bersih</b><div class="muted" style="font-size:12px">seluruh pesanan dihitung, termasuk yang belum dibayar</div></td>
-                  <td class="right">${U.rupiah(omzet)} − ${U.rupiah(totalKeluar)} = <b>${U.rupiah(laba)}</b></td></tr>
-              <tr><td><b>Laba kotor</b><div class="muted" style="font-size:12px">hanya uang yang sudah benar-benar diterima</div></td>
-                  <td class="right">${U.rupiah(terbayar)} − ${U.rupiah(totalKeluar)} = <b>${U.rupiah(labaKotor)}</b></td></tr>
-              <tr><td>Selisihnya</td>
-                  <td class="right">piutang ${U.rupiah(piutang)}</td></tr>
-            </tbody>
-          </table></div>
-          <p class="muted" style="margin-bottom:0">
-            Laba bersih memakai nilai semua pesanan yang masuk periode ini, jadi angkanya
-            belum tentu ada di laci. Laba kotor memakai uang yang sudah diterima, jadi
-            paling dekat dengan kas nyata. Selisih keduanya adalah piutang yang masih
-            ditagih. Kalau semua pelanggan sudah bayar, kedua angka ini sama.
-          </p>
+        <div class="row" style="flex-wrap:wrap; align-items:flex-start; margin-bottom:16px">
+          <div class="card card-pad" style="min-width:300px; flex:1">
+            <b>Urutan hitungannya</b>
+            <div class="table-wrap mt"><table>
+              <tbody>
+                <tr><td>Omzet<div class="muted" style="font-size:12px">nilai semua nota periode ini</div></td>
+                    <td class="right">${U.rupiah(omzet)}</td></tr>
+                <tr><td>Piutang<div class="muted" style="font-size:12px">nota yang belum dibayar</div></td>
+                    <td class="right">− ${U.rupiah(piutang)}</td></tr>
+                <tr><td><b>Laba kotor</b><div class="muted" style="font-size:12px">uang yang benar-benar diterima</div></td>
+                    <td class="right"><b>${U.rupiah(labaKotor)}</b></td></tr>
+                <tr><td>Pengeluaran</td>
+                    <td class="right">− ${U.rupiah(totalKeluar)}</td></tr>
+                <tr><td><b>Laba bersih</b></td>
+                    <td class="right"><b>${U.rupiah(laba)}</b></td></tr>
+              </tbody>
+            </table></div>
+            <p class="muted" style="margin-bottom:0">
+              Laba kotor hanya menghitung uang yang sudah masuk, jadi piutang tidak
+              pernah terbaca sebagai untung. Laba bersih adalah sisanya setelah
+              seluruh pengeluaran periode ini dibayar.
+            </p>
+          </div>
+
+          <div class="card card-pad" style="min-width:280px; flex:1">
+            <b>Uang masuk menurut cara bayar</b>
+            <div class="table-wrap mt"><table>
+              <thead><tr><th>Cara bayar</th><th class="right">Jumlah</th></tr></thead>
+              <tbody>
+                ${
+                  metodeUrut.length
+                    ? metodeUrut
+                        .map(
+                          ([m, v]) => `<tr><td>${esc(NAMA_METODE[m] || m)}</td>
+                            <td class="right">${U.rupiah(v)}</td></tr>`
+                        )
+                        .join('')
+                    : '<tr><td colspan="2" class="muted">Belum ada uang masuk pada periode ini.</td></tr>'
+                }
+                <tr><td><b>Non-tunai</b><div class="muted" style="font-size:12px">selain tunai</div></td>
+                    <td class="right"><b>${U.rupiah(nonTunai)}</b></td></tr>
+                <tr><td><b>Total diterima</b></td>
+                    <td class="right"><b>${U.rupiah(terbayar)}</b></td></tr>
+              </tbody>
+            </table></div>
+            <p class="muted" style="margin-bottom:0">
+              Angka tunai inilah yang seharusnya cocok dengan isi laci saat tutup toko.
+              Sisanya masuk ke rekening atau dompet digital, jadi perlu dicocokkan
+              terpisah dengan mutasi rekening.
+            </p>
+          </div>
         </div>
 
         <div class="row" style="flex-wrap:wrap; align-items:flex-start">
@@ -1131,6 +1196,88 @@ window.Views = (function () {
   }
 
   /* ================= LAYANAN ================= */
+
+  /** Impor daftar layanan. Bentuknya sengaja sama dengan impor pelanggan
+      supaya pemilik tidak perlu belajar dua cara yang berbeda. */
+  function imporLayanan(setelahnya) {
+    const modal = document.getElementById('modal');
+    const inner = document.getElementById('modalInner');
+    inner.innerHTML = `
+      <h3>Impor Daftar Layanan</h3>
+      <p class="muted" style="margin-top:-6px">
+        Tempel dari Excel atau aplikasi kasir lama, atau pilih berkas CSV.
+        Satu baris satu layanan. Nama yang sudah ada otomatis dilewati.
+      </p>
+      <div class="field">
+        <label class="btn btn-sm btn-block" for="fileLayanan">📄 Pilih berkas CSV / TXT</label>
+        <input type="file" id="fileLayanan" accept=".csv,.txt,text/csv,text/plain" hidden>
+      </div>
+      <div class="field">
+        <label for="teksLayanan">Atau tempel di sini</label>
+        <textarea class="input" id="teksLayanan" style="min-height:150px; font-family:ui-monospace, monospace; font-size:13px"
+          placeholder="nama,satuan,harga,durasi&#10;Cuci Setrika,kg,8000,3&#10;Bed Cover,pcs,25000,3&#10;Setrika Saja 5000"></textarea>
+      </div>
+      <div id="pratinjauLayanan"></div>
+      <div class="modal-actions">
+        <button type="submit" class="btn" value="batal">Batal</button>
+        <button type="button" class="btn btn-primary" id="btnJalankanImporLayanan" disabled>Impor</button>
+      </div>`;
+
+    const area = inner.querySelector('#teksLayanan');
+    const pratinjau = inner.querySelector('#pratinjauLayanan');
+    const tombol = inner.querySelector('#btnJalankanImporLayanan');
+    let hasil = [];
+
+    function periksa() {
+      const { data, dilewati } = U.uraiLayanan(area.value);
+      hasil = data;
+      tombol.disabled = data.length === 0;
+      if (!area.value.trim()) {
+        pratinjau.innerHTML = '';
+        return;
+      }
+      const contoh = data
+        .slice(0, 4)
+        .map(
+          (l) => `<tr><td>${esc(l.nama)}</td><td>${esc(l.satuan)}</td>
+                  <td class="right">${U.rupiah(l.harga)}</td><td class="right">${l.durasi} hari</td></tr>`
+        )
+        .join('');
+      pratinjau.innerHTML = `
+        <div class="card card-pad" style="background:var(--surface-2)">
+          <b>${data.length} layanan terbaca</b>${dilewati ? ` <span class="muted">(${dilewati} baris dilewati)</span>` : ''}
+          ${
+            data.length
+              ? `<div class="table-wrap mt"><table><tbody>${contoh}</tbody></table></div>
+                 ${data.length > 4 ? `<p class="muted" style="margin:6px 0 0">…dan ${data.length - 4} lainnya</p>` : ''}
+                 <p class="muted" style="margin:6px 0 0">Periksa harga dan satuannya dulu.
+                 Satuan yang tidak dikenali dianggap kg, estimasi kosong dianggap 2 hari —
+                 keduanya masih bisa diubah setelah masuk.</p>`
+              : '<p class="muted" style="margin:6px 0 0">Belum ada baris yang bisa dibaca.</p>'
+          }
+        </div>`;
+    }
+
+    area.addEventListener('input', periksa);
+
+    inner.querySelector('#fileLayanan').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      area.value = await file.text();
+      periksa();
+    });
+
+    tombol.addEventListener('click', () => {
+      const { masuk, dilewati } = DB.imporLayanan(hasil);
+      modal.close();
+      setelahnya();
+      U.toast(`${masuk} layanan masuk${dilewati ? `, ${dilewati} dilewati karena namanya sudah ada` : ''}`);
+    });
+
+    modal.returnValue = 'batal';
+    modal.showModal();
+  }
+
   function layanan(el) {
     el.innerHTML = `
       <div class="page-head">
@@ -1138,7 +1285,11 @@ window.Views = (function () {
           <h1 class="page-title">Layanan &amp; Harga</h1>
           <p class="page-sub">Ubah harga sesuai tarif laundry Anda.</p>
         </div>
-        <button class="btn btn-primary" id="btnTambah" type="button">+ Tambah Layanan</button>
+        <div class="row" style="flex-wrap:wrap">
+          <button class="btn" id="btnEksporLayanan" type="button">⬇️ Ekspor</button>
+          <button class="btn" id="btnImporLayanan" type="button">⬆️ Impor</button>
+          <button class="btn btn-primary" id="btnTambah" type="button">+ Tambah Layanan</button>
+        </div>
       </div>
       <div class="card"><div class="table-wrap"><table>
         <thead><tr><th>Nama</th><th>Satuan</th><th>Harga</th><th>Estimasi</th><th>Status</th><th class="right">Aksi</th></tr></thead>
@@ -1197,6 +1348,26 @@ window.Views = (function () {
     }
 
     el.querySelector('#btnTambah').addEventListener('click', () => formLayanan(null));
+
+    /* Ekspor memakai CSV, bukan JSON: berkasnya bisa dibuka dan disunting di
+       Excel, dan hasil suntingannya bisa langsung dimasukkan lagi lewat
+       Impor. Judul kolomnya sama persis dengan yang dikenali pembaca impor. */
+    el.querySelector('#btnEksporLayanan').addEventListener('click', () => {
+      const baris = [['nama', 'satuan', 'harga', 'durasi', 'aktif']]
+        .concat(DB.layanan().map((l) => [l.nama, l.satuan, l.harga, l.durasi, l.aktif === false ? 'tidak' : 'ya']))
+        .map((k) => k.map((v) => (/[",;\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v)).join(','))
+        .join('\n');
+      // BOM di depan supaya Excel membaca huruf beraksen dengan benar.
+      const blob = new Blob(['\ufeff' + baris], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `layanan-${DB.toko().nama.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-${U.hariIni()}.csv`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      U.toast(`${DB.layanan().length} layanan diekspor`);
+    });
+
+    el.querySelector('#btnImporLayanan').addEventListener('click', () => imporLayanan(gambar));
 
     tbody.addEventListener('click', async (e) => {
       const ubah = e.target.closest('[data-ubah]');

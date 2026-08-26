@@ -1,7 +1,25 @@
-/* Struk: cetak (printer thermal 58/80mm atau simpan PDF) dan kirim via WhatsApp. */
+/* Struk: cetak (printer thermal 58 atau 80 mm, atau simpan PDF) dan kirim
+   via WhatsApp.
+
+   Ukuran kertas BUKAN hiasan. Sebelumnya struk dipaku ke 80 mm padahal
+   keterangan di baris ini sudah menyebut 58 mm juga — jadi di printer 58 mm
+   kolom kanan (yang memuat angka rupiah) terpotong atau dikecilkan paksa oleh
+   pencetaknya. Sekarang ukurannya mengikuti pengaturan toko.
+
+   Angka 48 mm untuk kertas 58 mm bukan tebakan: printer thermal 58 mm yang
+   umum mencetak selebar 384 titik pada 203 dpi, yaitu 48 mm. Sisanya tepi
+   yang memang tidak bisa dicetak. */
 window.Receipt = (function () {
+  const UKURAN = {
+    58: { kertas: '58mm', isi: '48mm', tepi: '2mm', teks: 11, judul: 13, total: 13, kecil: 9, logoL: '26mm', logoT: '13mm' },
+    80: { kertas: '80mm', isi: '72mm', tepi: '4mm', teks: 12, judul: 15, total: 14, kecil: 10, logoL: '36mm', logoT: '18mm' },
+  };
+
+  const ukuran = () => UKURAN[String(DB.toko().lebarStruk) === '80' ? 80 : 58];
+
   function html(p) {
     const t = DB.toko();
+    const u = ukuran();
     const baris = p.item
       .map(
         (i) => `
@@ -21,18 +39,19 @@ window.Receipt = (function () {
     return `<!DOCTYPE html><html lang="id"><head><meta charset="utf-8">
 <title>Struk ${U.esc(p.kode)}</title>
 <style>
-  @page { size: 80mm auto; margin: 4mm; }
-  body { font-family: "Courier New", monospace; font-size: 12px; color: #000; margin: 0; }
-  .wrap { width: 72mm; margin: 0 auto; }
-  h1 { font-size: 15px; text-align: center; margin: 0 0 2px; }
+  @page { size: ${u.kertas} auto; margin: ${u.tepi}; }
+  body { font-family: "Courier New", monospace; font-size: ${u.teks}px; color: #000; margin: 0; }
+  .wrap { width: ${u.isi}; margin: 0 auto; }
+  h1 { font-size: ${u.judul}px; text-align: center; margin: 0 0 2px; }
   .c { text-align: center; }
   .r { text-align: right; }
   .sep { border-top: 1px dashed #000; margin: 6px 0; }
   table { width: 100%; border-collapse: collapse; }
-  td { padding: 1px 0; vertical-align: top; }
-  .tot { font-size: 14px; font-weight: bold; }
-  .kecil { font-size: 10px; }
-  .logo { display: block; margin: 0 auto 4px; max-width: 36mm; max-height: 18mm; }
+  td { padding: 1px 0; vertical-align: top; overflow-wrap: anywhere; }
+  td.r { white-space: nowrap; padding-left: 4px; }
+  .tot { font-size: ${u.total}px; font-weight: bold; }
+  .kecil { font-size: ${u.kecil}px; }
+  .logo { display: block; margin: 0 auto 4px; max-width: ${u.logoL}; max-height: ${u.logoT}; }
 </style></head><body>
 <div class="wrap">
   ${t.logo || Merek.LOGO ? `<img class="logo" src="${t.logo || Merek.LOGO}" alt="">` : ''}
@@ -105,5 +124,30 @@ window.Receipt = (function () {
     window.open(url, '_blank', 'noopener');
   }
 
-  return { cetak, teks, kirimWA, html };
+  /** Pesanan contoh untuk tombol Tes cetak di Pengaturan. Sengaja memakai
+      nama dan angka yang panjang, supaya kalau kertasnya kurang lebar
+      kelihatan langsung di kertas, bukan nanti saat melayani pelanggan. */
+  function contoh() {
+    const sekarang = new Date().toISOString();
+    return {
+      kode: 'CONTOH-' + DB.kodePerangkat() + '001',
+      dibuat: sekarang,
+      estimasiSelesai: sekarang,
+      pelanggan: { nama: 'Contoh Pelanggan', hp: '' },
+      item: [
+        { nama: 'Cuci Setrika', qty: 3.5, satuan: 'kg', harga: 8000, subtotal: 28000 },
+        { nama: 'Bed Cover Ukuran Besar', qty: 2, satuan: 'pcs', harga: 25000, subtotal: 50000 },
+      ],
+      subtotal: 78000,
+      diskon: 3000,
+      total: 75000,
+      dibayar: 75000,
+      diterima: 100000,
+      metode: 'tunai',
+      kasir: 'Tes Printer',
+      catatan: 'Ini struk contoh untuk menguji printer.',
+    };
+  }
+
+  return { cetak, teks, kirimWA, html, contoh };
 })();

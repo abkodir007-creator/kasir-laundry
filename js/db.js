@@ -32,6 +32,7 @@ window.DB = (function () {
       telp: '',
       logo: '',                 // data URI, diisi lewat menu Pengaturan
       catatanStruk: 'Bersih - Wangi - Cepat - Terpercaya. Terima kasih! Barang yang tidak diambil dalam 30 hari di luar tanggung jawab kami.',
+      lebarStruk: '58',         // '58' atau '80', mengikuti lebar kertas printer
     },
     layanan: LAYANAN_AWAL,
     pengguna: penggunaAwal(),

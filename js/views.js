@@ -1454,6 +1454,19 @@ window.Views = (function () {
           <div class="field"><label>Telepon</label><input class="input" id="tTelp" value="${esc(t.telp)}"></div>
           <div class="field"><label>Catatan bawah struk</label><textarea class="input" id="tCatatan">${esc(t.catatanStruk)}</textarea></div>
           <div class="field">
+            <label for="tLebar">Lebar kertas printer</label>
+            <select class="input" id="tLebar">
+              <option value="58"${String(t.lebarStruk) !== '80' ? ' selected' : ''}>58 mm (printer kecil)</option>
+              <option value="80"${String(t.lebarStruk) === '80' ? ' selected' : ''}>80 mm (printer besar)</option>
+            </select>
+            <small class="muted">Salah pilih membuat kolom harga terpotong atau tulisan mengecil.
+            Ukurannya tertulis di kertas atau kotak printer.</small>
+          </div>
+          <div class="field">
+            <button class="btn btn-block" id="btnTesCetak" type="button">🖨️ Tes cetak struk contoh</button>
+            <small class="muted">Mencetak satu struk contoh tanpa membuat pesanan.</small>
+          </div>
+          <div class="field">
             <label>Logo toko</label>
             <div class="row" style="align-items:center">
               <div style="flex:0 0 auto">
@@ -1506,6 +1519,7 @@ window.Views = (function () {
         alamat: el.querySelector('#tAlamat').value.trim(),
         telp: el.querySelector('#tTelp').value.trim(),
         catatanStruk: el.querySelector('#tCatatan').value.trim(),
+        lebarStruk: el.querySelector('#tLebar').value,
       });
       window.SegarkanMerek();
       U.toast('Data toko tersimpan');
@@ -1551,6 +1565,17 @@ window.Views = (function () {
       } catch (err) {
         U.toast('Gagal memulihkan: ' + err.message);
       }
+    });
+
+    /* Tes cetak memakai pilihan yang sedang tampil di layar, bukan yang sudah
+       tersimpan — supaya pemilik bisa mencoba 58 dan 80 bergantian sampai pas
+       tanpa menyimpan dulu. */
+    el.querySelector('#btnTesCetak').addEventListener('click', () => {
+      const semula = DB.toko().lebarStruk;
+      const dipilih = el.querySelector('#tLebar').value;
+      if (dipilih !== semula) DB.simpanToko({ lebarStruk: dipilih });
+      Receipt.cetak(Receipt.contoh());
+      U.toast(`Mencetak struk contoh ${dipilih} mm`);
     });
 
     el.querySelector('#btnCadanganOtomatis')?.addEventListener('click', async () => {

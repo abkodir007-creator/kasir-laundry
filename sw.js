@@ -12,11 +12,11 @@
      jarang berubah.
 
    Saat offline, semuanya jatuh ke simpanan seperti biasa. */
-const VERSI = 'kasir-laundry-v14';
+const VERSI = 'kasir-laundry-v15';
 
 /* Alamat berkas harus persis sama dengan yang ditulis index.html, penanda
    versinya sekalian, supaya yang disimpan memang yang diminta halaman. */
-const CAP = '?v=14';
+const CAP = '?v=15';
 
 const BERKAS = [
   './',

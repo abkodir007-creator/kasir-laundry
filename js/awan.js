@@ -26,7 +26,7 @@ window.Awan = (function () {
   const TOKO = 'starwash';
 
   // Koleksi yang disinkronkan, dipetakan ke nama larik di dalam state.
-  const KOLEKSI = ['layanan', 'pengguna', 'pesanan', 'pengeluaran', 'pelanggan'];
+  const KOLEKSI = ['kategori', 'layanan', 'pengguna', 'pesanan', 'pengeluaran', 'pelanggan'];
 
   let app = null;
   let auth = null;

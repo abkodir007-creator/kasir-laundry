@@ -3,17 +3,28 @@
 window.DB = (function () {
   const KEY = 'kasir-laundry-v1';
 
+  /* Kategori layanan menyimpan lama pengerjaan dalam JAM, bukan hari.
+
+     Alasannya satu: "Ekspres 6 jam" tidak bisa diwakili satuan hari. Kalau
+     dibulatkan jadi 1 hari, janji ke pelanggan meleset jauh — dan ketepatan
+     janji itulah gunanya kategori ini ada. Reguler 3 hari cukup ditulis 72. */
+  const KATEGORI_AWAL = [
+    { id: 'k1', nama: 'Ekspres 6 Jam', jam: 6,  aktif: true },
+    { id: 'k2', nama: 'Kilat 1 Hari',  jam: 24, aktif: true },
+    { id: 'k3', nama: 'Reguler 3 Hari', jam: 72, aktif: true },
+  ];
+
   const LAYANAN_AWAL = [
-    { id: 'l1', nama: 'Cuci Kering',        satuan: 'kg',  harga: 6000,  durasi: 2, aktif: true },
-    { id: 'l2', nama: 'Cuci Setrika',       satuan: 'kg',  harga: 8000,  durasi: 3, aktif: true },
-    { id: 'l3', nama: 'Setrika Saja',       satuan: 'kg',  harga: 5000,  durasi: 2, aktif: true },
-    { id: 'l4', nama: 'Express 1 Hari',     satuan: 'kg',  harga: 12000, durasi: 1, aktif: true },
-    { id: 'l5', nama: 'Bed Cover',          satuan: 'pcs', harga: 25000, durasi: 3, aktif: true },
-    { id: 'l6', nama: 'Selimut',            satuan: 'pcs', harga: 20000, durasi: 3, aktif: true },
-    { id: 'l7', nama: 'Jas / Blazer',       satuan: 'pcs', harga: 30000, durasi: 3, aktif: true },
-    { id: 'l8', nama: 'Sepatu',             satuan: 'pcs', harga: 35000, durasi: 3, aktif: true },
-    { id: 'l9', nama: 'Gorden',             satuan: 'kg',  harga: 10000, durasi: 4, aktif: true },
-    { id: 'l10', nama: 'Boneka Besar',      satuan: 'pcs', harga: 28000, durasi: 3, aktif: true },
+    { id: 'l1', nama: 'Cuci Kering',        satuan: 'kg',  harga: 6000,  durasi: 2, aktif: true, kategoriId: 'k3' },
+    { id: 'l2', nama: 'Cuci Setrika',       satuan: 'kg',  harga: 8000,  durasi: 3, aktif: true, kategoriId: 'k3' },
+    { id: 'l3', nama: 'Setrika Saja',       satuan: 'kg',  harga: 5000,  durasi: 2, aktif: true, kategoriId: 'k2' },
+    { id: 'l4', nama: 'Express 1 Hari',     satuan: 'kg',  harga: 12000, durasi: 1, aktif: true, kategoriId: 'k2' },
+    { id: 'l5', nama: 'Bed Cover',          satuan: 'pcs', harga: 25000, durasi: 3, aktif: true, kategoriId: 'k3' },
+    { id: 'l6', nama: 'Selimut',            satuan: 'pcs', harga: 20000, durasi: 3, aktif: true, kategoriId: 'k3' },
+    { id: 'l7', nama: 'Jas / Blazer',       satuan: 'pcs', harga: 30000, durasi: 3, aktif: true, kategoriId: 'k3' },
+    { id: 'l8', nama: 'Sepatu',             satuan: 'pcs', harga: 35000, durasi: 3, aktif: true, kategoriId: 'k3' },
+    { id: 'l9', nama: 'Gorden',             satuan: 'kg',  harga: 10000, durasi: 4, aktif: true, kategoriId: 'k3' },
+    { id: 'l10', nama: 'Boneka Besar',      satuan: 'pcs', harga: 28000, durasi: 3, aktif: true, kategoriId: 'k3' },
   ];
 
   /* Akun bawaan: satu owner dengan PIN 1234 yang wajib diganti.
@@ -33,7 +44,9 @@ window.DB = (function () {
       logo: '',                 // data URI, diisi lewat menu Pengaturan
       catatanStruk: 'Bersih - Wangi - Cepat - Terpercaya. Terima kasih! Barang yang tidak diambil dalam 30 hari di luar tanggung jawab kami.',
       lebarStruk: '58',         // '58' atau '80', mengikuti lebar kertas printer
+      cetakSaatSimpan: 'pelanggan',  // 'pelanggan' | 'toko' | 'dua'
     },
+    kategori: KATEGORI_AWAL,
     layanan: LAYANAN_AWAL,
     pengguna: penggunaAwal(),
     pesanan: [],
@@ -85,6 +98,12 @@ window.DB = (function () {
      dan tidak ada nota yang bisa dibuat. Kalau sampai habis, daftar contoh
      dipasang kembali dan pemilik diberi tahu supaya menyesuaikannya. Hanya
      dijalankan saat aplikasi dibuka, bukan saat pemilik sedang menyunting. */
+  function pastikanAdaKategori() {
+    if (state.kategori && state.kategori.length) return;
+    state.kategori = structuredClone(KATEGORI_AWAL);
+    simpan();
+  }
+
   let layananDipulihkan = false;
   function pastikanAdaLayanan() {
     if (state.layanan && state.layanan.length) return;
@@ -207,11 +226,56 @@ window.DB = (function () {
   })();
 
   pastikanAdaOwner();
+  pastikanAdaKategori();
   pastikanAdaLayanan();
 
   // Pemasangan lama menyimpan nomor di dalam state; pindahkan sekali ke lokal.
   if (localStorage.getItem(K_NOMOR) === null) {
     localStorage.setItem(K_NOMOR, String(state.nomorTerakhir || 0));
+  }
+
+  /* ---------- Kategori layanan ---------- */
+  const kategori = () => state.kategori || [];
+  const kategoriAktif = () => kategori().filter((k) => k.aktif !== false);
+  const cariKategori = (id) => kategori().find((k) => k.id === id);
+
+  /** Lama pengerjaan sebuah layanan dalam jam.
+
+      Layanan lama (sebelum ada kategori) masih menyimpan durasi dalam hari.
+      Selama kategorinya belum dipilih, angka lama itu yang dipakai supaya
+      estimasi pesanan tidak berubah diam-diam. */
+  function jamLayanan(l) {
+    const k = l && l.kategoriId ? cariKategori(l.kategoriId) : null;
+    if (k && Number(k.jam) > 0) return Number(k.jam);
+    return Math.max(1, Number(l?.durasi) || 1) * 24;
+  }
+
+  function simpanKategori(data) {
+    const lama = data.id ? cariKategori(data.id) : null;
+    const baru = {
+      ...(lama || { id: U.idBaru() }),
+      nama: String(data.nama || '').trim(),
+      jam: Math.max(1, Math.round(Number(data.jam) || 1)),
+      aktif: data.aktif !== false,
+    };
+    if (!baru.nama) throw new Error('Nama kategori wajib diisi');
+    if (lama) state.kategori[state.kategori.indexOf(lama)] = baru;
+    else state.kategori.push(baru);
+    simpan();
+    catat('kategori', baru);
+    return baru;
+  }
+
+  /** Kategori yang masih dipakai layanan tidak boleh hilang begitu saja —
+      layanannya akan kehilangan acuan waktu tanpa pemberitahuan. */
+  function hapusKategori(id) {
+    const dipakai = state.layanan.filter((l) => l.kategoriId === id);
+    if (dipakai.length) {
+      throw new Error(`Masih dipakai ${dipakai.length} layanan. Pindahkan dulu kategorinya.`);
+    }
+    state.kategori = kategori().filter((k) => k.id !== id);
+    simpan();
+    buang('kategori', id);
   }
 
   /* ---------- Layanan ---------- */
@@ -228,6 +292,30 @@ window.DB = (function () {
     }
     simpan();
     catat('layanan', data.id ? cariLayanan(data.id) : state.layanan[state.layanan.length - 1]);
+  }
+
+  /* Menentukan kategori untuk layanan hasil impor.
+
+     Dicocokkan bertahap: nama kategori dulu, lalu lama pengerjaan yang sama,
+     baru dibuatkan kategori baru. Tanpa ini setiap impor akan melahirkan
+     kategori kembar yang isinya sama persis. */
+  function kategoriUntukImpor(l) {
+    const nama = String(l.kategori || '').trim();
+    if (nama) {
+      const cocok = kategori().find((k) => k.nama.toLowerCase() === nama.toLowerCase());
+      if (cocok) return cocok.id;
+    }
+
+    const jam = Number(l.jam) > 0 ? Number(l.jam) : Math.max(1, Number(l.durasi) || 2) * 24;
+    const samaLama = kategori().find((k) => Number(k.jam) === jam);
+    if (samaLama && !nama) return samaLama.id;
+    if (samaLama && nama.toLowerCase() === samaLama.nama.toLowerCase()) return samaLama.id;
+
+    const label = nama || (jam < 24 ? `${jam} Jam` : `${Math.round(jam / 24)} Hari`);
+    const dibuat = { id: U.idBaru(), nama: label, jam, aktif: true };
+    state.kategori.push(dibuat);
+    catat('kategori', dibuat);
+    return dibuat.id;
   }
 
   /** Masukkan banyak layanan sekaligus. Nama yang sudah ada dilewati, bukan
@@ -248,7 +336,8 @@ window.DB = (function () {
       const baru = {
         id: U.idBaru(),
         nama: l.nama.trim(),
-        satuan: l.satuan === 'pcs' ? 'pcs' : 'kg',
+        satuan: ['pcs', 'm'].includes(l.satuan) ? l.satuan : 'kg',
+        kategoriId: kategoriUntukImpor(l),
         harga: Math.max(0, Math.round(Number(l.harga) || 0)),
         durasi: Math.max(1, Number(l.durasi) || 2),
         aktif: l.aktif !== false,
@@ -330,7 +419,9 @@ window.DB = (function () {
 
   function buatPesanan(input) {
     const sekarang = new Date().toISOString();
-    const maksDurasi = Math.max(1, ...input.item.map((i) => Number(i.durasi) || 1));
+    // Kalau satu nota memuat beberapa layanan, yang dijanjikan adalah yang
+    // paling lama — pesanan baru selesai kalau semuanya selesai.
+    const maksJam = Math.max(1, ...input.item.map((i) => Number(i.jam) || (Number(i.durasi) || 1) * 24));
     const p = {
       id: U.idBaru(),
       kode: kodeBaru(),
@@ -347,7 +438,7 @@ window.DB = (function () {
       kasir: input.kasir || '-',            // siapa yang menerima pesanan ini
       catatan: (input.catatan || '').trim(),
       dibuat: sekarang,
-      estimasiSelesai: U.tambahHari(sekarang, maksDurasi),
+      estimasiSelesai: U.tambahJam(sekarang, maksJam),
       riwayat: [{ status: 'antrian', waktu: sekarang }],
     };
     state.pesanan.unshift(p);
@@ -613,6 +704,7 @@ window.DB = (function () {
     layananDipulihkan: () => layananDipulihkan,
     pengeluaran, cariPengeluaran, simpanPengeluaran, hapusPengeluaran,
     layanan, layananAktif, cariLayanan, simpanLayanan, hapusLayanan, imporLayanan,
+    kategori, kategoriAktif, cariKategori, simpanKategori, hapusKategori, jamLayanan,
     pengguna, cariPengguna, simpanPengguna, hapusPengguna,
     pesanan, cariPesanan, buatPesanan, ubahStatus, lunasi, hapusPesanan,
     pelanggan, bukuPelanggan, simpanPelanggan, hapusPelanggan, imporPelanggan, toko, simpanToko, ekspor, impor, resetSemua,

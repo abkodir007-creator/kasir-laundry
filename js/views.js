@@ -214,7 +214,7 @@ window.Views = (function () {
   }
 
   /* ================= KASIR ================= */
-  const pos = { keranjang: [], cari: '' };
+  const pos = { keranjang: [], cari: '', kategori: 'semua' };
 
   function kasir(el) {
     el.innerHTML = `
@@ -229,6 +229,16 @@ window.Views = (function () {
           <div class="filters">
             <input class="input" id="cariLayanan" type="search" placeholder="Cari layanan…" value="${esc(pos.cari)}">
           </div>
+          <div class="seg seg-wrap" id="filterKategori">
+            <button type="button" class="${pos.kategori === 'semua' ? 'is-active' : ''}" data-kat="semua">Semua</button>
+            ${DB.kategoriAktif()
+              .slice()
+              .sort((a, b) => a.jam - b.jam)
+              .map(
+                (k) => `<button type="button" class="${pos.kategori === k.id ? 'is-active' : ''}" data-kat="${k.id}">${esc(k.nama)}</button>`
+              )
+              .join('')}
+          </div>
           <div class="svc-grid" id="svcGrid"></div>
         </div>
 
@@ -239,9 +249,11 @@ window.Views = (function () {
           </div>
           <div class="card-pad" style="border-bottom:1px solid var(--border)">
             <div class="field">
-              <label for="inpNama">Nama pelanggan</label>
-              <input class="input" id="inpNama" list="dlNama" autocomplete="off" placeholder="Ketik nama, pelanggan lama muncul sendiri">
+              <label for="inpNama">Nama pelanggan <span style="color:var(--aksen)">*</span></label>
+              <input class="input" id="inpNama" list="dlNama" autocomplete="off" required
+                placeholder="Ketik nama, pelanggan lama muncul sendiri">
               <datalist id="dlNama"></datalist>
+              <small class="muted" id="infoPelanggan">Wajib diisi.</small>
             </div>
             <div class="field" style="margin-bottom:0">
               <label for="inpHp">No. WhatsApp (opsional)</label>
@@ -300,10 +312,39 @@ window.Views = (function () {
       const cocokNama = (v) => buku.find((c) => c.nama.toLowerCase() === v.trim().toLowerCase());
       const cocokHp = (v) => buku.find((c) => c.hp && U.waNomor(c.hp) === U.waNomor(v));
 
+      const info = el.querySelector('#infoPelanggan');
+
+      /* Kasir perlu tahu sejak awal apakah ini pelanggan lama atau baru —
+         kalau baru, nomornya diminta sekarang, bukan setelah nota tercetak. */
+      function perbaruiInfoPelanggan() {
+        const v = inpNama.value.trim();
+        if (!v) {
+          info.textContent = 'Wajib diisi.';
+          info.className = 'muted';
+          return;
+        }
+        const c = cocokNama(v);
+        if (c) {
+          info.textContent = `Pelanggan lama${c.hp ? ' • ' + c.hp : ''}`;
+          info.className = 'petunjuk-ok';
+        } else {
+          info.textContent = 'Pelanggan baru — akan disimpan ke buku pelanggan.';
+          info.className = 'muted';
+        }
+      }
+
+      inpNama.addEventListener('input', () => {
+        perbaruiInfoPelanggan();
+        hitung();
+      });
+
       inpNama.addEventListener('change', () => {
         const c = cocokNama(inpNama.value);
         if (c?.hp && !inpHp.value.trim()) inpHp.value = c.hp;
+        perbaruiInfoPelanggan();
       });
+
+      perbaruiInfoPelanggan();
       inpHp.addEventListener('change', () => {
         const c = cocokHp(inpHp.value);
         if (c?.nama && !inpNama.value.trim()) inpNama.value = c.nama;
@@ -312,13 +353,16 @@ window.Views = (function () {
 
     function gambarLayanan() {
       const q = pos.cari.toLowerCase();
-      const daftar = DB.layananAktif().filter((l) => l.nama.toLowerCase().includes(q));
+      const daftar = DB.layananAktif()
+        .filter((l) => l.nama.toLowerCase().includes(q))
+        .filter((l) => pos.kategori === 'semua' || l.kategoriId === pos.kategori);
       grid.innerHTML = daftar.length
         ? daftar
             .map(
               (l) => `
           <button class="svc" type="button" data-id="${l.id}">
             <span class="svc-name">${esc(l.nama)}</span>
+            <span class="svc-kat">${esc(DB.cariKategori(l.kategoriId)?.nama || lamaTeks(DB.jamLayanan(l)))}</span>
             <span>
               <span class="svc-price">${U.rupiah(l.harga)}</span>
               <span class="svc-unit">/ ${esc(l.satuan)}</span>
@@ -343,7 +387,7 @@ window.Views = (function () {
           <div class="muted" style="font-size:13px">${U.rupiah(i.harga)} / ${esc(i.satuan)}</div>
           <div class="qty">
             <button type="button" data-kurang="${idx}">−</button>
-            <input type="number" inputmode="decimal" min="0" step="${i.satuan === 'kg' ? '0.1' : '1'}" value="${i.qty}" data-qty="${idx}">
+            <input type="number" inputmode="decimal" min="0" step="${i.satuan === 'pcs' ? '1' : '0.1'}" value="${i.qty}" data-qty="${idx}">
             <span class="muted">${esc(i.satuan)}</span>
             <button type="button" data-tambah="${idx}">+</button>
             <button type="button" class="btn btn-sm btn-danger" style="margin-left:auto" data-hapus="${idx}">Hapus</button>
@@ -362,7 +406,8 @@ window.Views = (function () {
       const bayar = Number(el.querySelector('#inpBayar').value) || 0;
       el.querySelector('#sumSubtotal').textContent = U.rupiah(subtotal);
       el.querySelector('#sumTotal').textContent = U.rupiah(total);
-      el.querySelector('#btnSimpan').disabled = pos.keranjang.length === 0;
+      const adaNama = !!el.querySelector('#inpNama').value.trim();
+      el.querySelector('#btnSimpan').disabled = pos.keranjang.length === 0 || !adaNama;
       const info = el.querySelector('#infoKembali');
       if (bayar === 0) info.textContent = 'Belum dibayar — pesanan ditandai "belum lunas".';
       else if (bayar < total) info.textContent = `Kurang ${U.rupiah(total - bayar)} (bayar sebagian).`;
@@ -370,14 +415,57 @@ window.Views = (function () {
       return { subtotal, diskon, total, bayar };
     }
 
+    /* Begitu layanan diketuk, layar langsung membawa kasir ke isian jumlah.
+
+       Tanpa ini kasir harus menggulir sendiri ke bawah untuk mengisi kg,
+       dan di layar kecil kartu layanan lain ikut terketuk tanpa sengaja —
+       nota jadi memuat layanan yang tidak dipesan. */
+    function sorotItem(layananId) {
+      const idx = pos.keranjang.findIndex((i) => i.layananId === layananId);
+      if (idx < 0) return;
+      const kotak = el.querySelectorAll('.cart-item')[idx];
+      const isian = el.querySelector(`[data-qty="${idx}"]`);
+      if (!kotak) return;
+
+      kotak.classList.add('baru-masuk');
+      setTimeout(() => kotak.classList.remove('baru-masuk'), 900);
+
+      // scrollIntoView pada isian, bukan pada kotaknya: papan ketik tablet
+      // menutupi bagian bawah layar, jadi yang harus terlihat isiannya.
+      (isian || kotak).scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (isian) {
+        isian.focus({ preventScroll: true });
+        isian.select?.();
+      }
+    }
+
+    el.querySelector('#filterKategori').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-kat]');
+      if (!b) return;
+      pos.kategori = b.dataset.kat;
+      el.querySelectorAll('#filterKategori button').forEach((x) => x.classList.remove('is-active'));
+      b.classList.add('is-active');
+      gambarLayanan();
+    });
+
     grid.addEventListener('click', (e) => {
       const tombol = e.target.closest('[data-id]');
       if (!tombol) return;
       const l = DB.cariLayanan(tombol.dataset.id);
       const ada = pos.keranjang.find((i) => i.layananId === l.id);
       if (ada) ada.qty = Math.round((ada.qty + 1) * 100) / 100;
-      else pos.keranjang.push({ layananId: l.id, nama: l.nama, satuan: l.satuan, harga: l.harga, durasi: l.durasi, qty: 1 });
+      else
+        pos.keranjang.push({
+          layananId: l.id,
+          nama: l.nama,
+          satuan: l.satuan,
+          harga: l.harga,
+          durasi: l.durasi,
+          jam: DB.jamLayanan(l),
+          qty: 1,
+        });
       gambarKeranjang();
+      sorotItem(l.id);
     });
 
     el.querySelector('#cariLayanan').addEventListener('input', (e) => {
@@ -387,7 +475,7 @@ window.Views = (function () {
 
     el.querySelector('#cartItems').addEventListener('click', (e) => {
       const t = e.target;
-      const step = (idx) => (pos.keranjang[idx].satuan === 'kg' ? 0.5 : 1);
+      const step = (idx) => (pos.keranjang[idx].satuan === 'pcs' ? 1 : 0.5);
       if (t.dataset.tambah !== undefined) {
         const i = +t.dataset.tambah;
         pos.keranjang[i].qty = Math.round((pos.keranjang[i].qty + step(i)) * 100) / 100;
@@ -423,11 +511,19 @@ window.Views = (function () {
     });
 
     el.querySelector('#btnSimpan').addEventListener('click', () => {
+      const inpNama = el.querySelector('#inpNama');
+      const namaPelanggan = inpNama.value.trim();
+      if (!namaPelanggan) {
+        inpNama.focus();
+        inpNama.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return U.toast('Nama pelanggan wajib diisi');
+      }
+
       const item = pos.keranjang.filter((i) => i.qty > 0).map((i) => ({ ...i, subtotal: i.qty * i.harga }));
-      if (!item.length) return U.toast('Isi jumlah kg atau pcs dulu');
+      if (!item.length) return U.toast('Isi jumlah dulu');
       const { subtotal, diskon, total, bayar } = hitung();
       const p = DB.buatPesanan({
-        nama: el.querySelector('#inpNama').value,
+        nama: namaPelanggan,
         hp: el.querySelector('#inpHp').value,
         item,
         subtotal,
@@ -442,7 +538,9 @@ window.Views = (function () {
       pos.keranjang = [];
       kasir(el); // reset form
       U.toast(`Pesanan ${p.kode} tersimpan`);
-      Receipt.cetak(p);
+      const mode = DB.toko().cetakSaatSimpan;
+      if (mode === 'dua') Receipt.cetakDua(p);
+      else Receipt.cetak(p, mode === 'toko' ? 'toko' : 'pelanggan');
     });
 
     gambarLayanan();
@@ -563,7 +661,7 @@ window.Views = (function () {
       <h3>${esc(p.kode)} ${badgeStatus(p.status)}</h3>
       <p class="muted" style="margin-top:-6px">
         ${esc(p.pelanggan.nama)} • ${esc(p.pelanggan.hp || 'tanpa HP')}<br>
-        Masuk ${U.tanggalJam(p.dibuat)} • Estimasi ${U.tanggal(p.estimasiSelesai)}
+        Masuk ${U.tanggalJam(p.dibuat)} • Estimasi ${U.estimasi(p.estimasiSelesai)}
         ${p.kasir && p.kasir !== '-' ? `<br>Diterima oleh ${esc(p.kasir)}` : ''}
       </p>
       <div class="table-wrap"><table>
@@ -580,7 +678,8 @@ window.Views = (function () {
       </table></div>
       ${p.catatan ? `<p class="muted">Catatan: ${esc(p.catatan)}</p>` : ''}
       <div class="grid-2 mt">
-        <button type="button" class="btn" data-aksi="cetak">🖨️ Cetak Struk</button>
+        <button type="button" class="btn" data-aksi="cetak">🖨️ Struk Pelanggan</button>
+        <button type="button" class="btn" data-aksi="label">🏷️ Label Toko</button>
         <button type="button" class="btn" data-aksi="wa" ${p.pelanggan.hp ? '' : 'disabled'}>💬 Kirim WA</button>
         ${sisa ? `<button type="button" class="btn btn-primary" data-aksi="lunas">✅ Tandai Lunas</button>` : ''}
         ${Auth.isOwner() ? `<button type="button" class="btn btn-danger" data-aksi="hapus">🗑️ Hapus</button>` : ''}
@@ -593,7 +692,8 @@ window.Views = (function () {
       const b = e.target.closest('[data-aksi]');
       if (!b) return;
       const aksi = b.dataset.aksi;
-      if (aksi === 'cetak') Receipt.cetak(p);
+      if (aksi === 'cetak') Receipt.cetak(p, 'pelanggan');
+      if (aksi === 'label') Receipt.cetak(p, 'toko');
       if (aksi === 'wa') Receipt.kirimWA(p);
       if (aksi === 'lunas') {
         DB.lunasi(p.id, p.total, p.metode);
@@ -1197,6 +1297,16 @@ window.Views = (function () {
 
   /* ================= LAYANAN ================= */
 
+  /** Ubah jam jadi kalimat yang enak dibaca kasir: 6 jam, 1 hari, 3 hari. */
+  function lamaTeks(jam) {
+    const j = Math.max(1, Math.round(Number(jam) || 0));
+    if (j < 24) return `${j} jam`;
+    const hari = j / 24;
+    const bulat = Math.round(hari);
+    return Number.isInteger(hari) ? `${hari} hari` : `${bulat} hari (${j} jam)`;
+  }
+
+
   /** Impor daftar layanan. Bentuknya sengaja sama dengan impor pelanggan
       supaya pemilik tidak perlu belajar dua cara yang berbeda. */
   function imporLayanan(setelahnya) {
@@ -1215,7 +1325,7 @@ window.Views = (function () {
       <div class="field">
         <label for="teksLayanan">Atau tempel di sini</label>
         <textarea class="input" id="teksLayanan" style="min-height:150px; font-family:ui-monospace, monospace; font-size:13px"
-          placeholder="nama,satuan,harga,durasi&#10;Cuci Setrika,kg,8000,3&#10;Bed Cover,pcs,25000,3&#10;Setrika Saja 5000"></textarea>
+          placeholder="nama,kategori,satuan,harga,jam&#10;Cuci Setrika,Reguler 3 Hari,kg,8000,72&#10;Karpet,Kilat 1 Hari,m,15000,24&#10;Setrika Saja 5000"></textarea>
       </div>
       <div id="pratinjauLayanan"></div>
       <div class="modal-actions">
@@ -1251,8 +1361,8 @@ window.Views = (function () {
               ? `<div class="table-wrap mt"><table><tbody>${contoh}</tbody></table></div>
                  ${data.length > 4 ? `<p class="muted" style="margin:6px 0 0">…dan ${data.length - 4} lainnya</p>` : ''}
                  <p class="muted" style="margin:6px 0 0">Periksa harga dan satuannya dulu.
-                 Satuan yang tidak dikenali dianggap kg, estimasi kosong dianggap 2 hari —
-                 keduanya masih bisa diubah setelah masuk.</p>`
+                 Satuan yang tidak dikenali dianggap kg. Kategori yang belum ada akan dibuatkan
+                 sendiri dari kolom kategori atau jam — semuanya masih bisa diubah setelah masuk.</p>`
               : '<p class="muted" style="margin:6px 0 0">Belum ada baris yang bisa dibaca.</p>'
           }
         </div>`;
@@ -1292,9 +1402,23 @@ window.Views = (function () {
         </div>
       </div>
       <div class="card"><div class="table-wrap"><table>
-        <thead><tr><th>Nama</th><th>Satuan</th><th>Harga</th><th>Estimasi</th><th>Status</th><th class="right">Aksi</th></tr></thead>
+        <thead><tr><th>Nama</th><th>Kategori</th><th>Satuan</th><th>Harga</th><th>Estimasi</th><th>Status</th><th class="right">Aksi</th></tr></thead>
         <tbody id="barisLayanan"></tbody>
-      </table></div></div>`;
+      </table></div></div>
+
+      <div class="card card-pad mt">
+        <div class="row" style="justify-content:space-between; align-items:center; flex-wrap:wrap">
+          <div>
+            <b>Kategori &amp; Lama Pengerjaan</b>
+            <p class="muted" style="margin:2px 0 0">Kategori menentukan janji waktu selesai pada nota.</p>
+          </div>
+          <button class="btn btn-sm" id="btnTambahKategori" type="button">+ Tambah Kategori</button>
+        </div>
+        <div class="table-wrap mt"><table>
+          <thead><tr><th>Kategori</th><th>Lama</th><th>Dipakai</th><th class="right">Aksi</th></tr></thead>
+          <tbody id="barisKategori"></tbody>
+        </table></div>
+      </div>`;
 
     const tbody = el.querySelector('#barisLayanan');
 
@@ -1303,9 +1427,14 @@ window.Views = (function () {
         .map(
           (l) => `<tr>
             <td><b>${esc(l.nama)}</b></td>
+            <td>${
+              DB.cariKategori(l.kategoriId)
+                ? `<span class="pill pill-info">${esc(DB.cariKategori(l.kategoriId).nama)}</span>`
+                : '<span class="pill pill-muted">Tanpa kategori</span>'
+            }</td>
             <td>${esc(l.satuan)}</td>
             <td>${U.rupiah(l.harga)}</td>
-            <td>${l.durasi} hari</td>
+            <td>${lamaTeks(DB.jamLayanan(l))}</td>
             <td>${l.aktif === false ? '<span class="pill pill-muted">Nonaktif</span>' : '<span class="pill pill-ok">Aktif</span>'}</td>
             <td class="right" style="white-space:nowrap">
               <button class="btn btn-sm" data-ubah="${l.id}">Ubah</button>
@@ -1321,15 +1450,21 @@ window.Views = (function () {
         l ? 'Ubah Layanan' : 'Tambah Layanan',
         `<div class="field"><label>Nama layanan</label>
            <input class="input" name="nama" value="${esc(l?.nama || '')}" placeholder="Cuci Setrika"></div>
+         <div class="field"><label>Kategori (menentukan waktu selesai)</label>
+           <select class="input" name="kategoriId">
+             ${DB.kategoriAktif()
+               .map((k) => `<option value="${k.id}" ${l?.kategoriId === k.id ? 'selected' : ''}>${esc(k.nama)} — ${lamaTeks(k.jam)}</option>`)
+               .join('')}
+           </select></div>
          <div class="field"><label>Satuan</label>
            <select class="input" name="satuan">
              <option value="kg" ${l?.satuan === 'kg' ? 'selected' : ''}>kg (berat)</option>
              <option value="pcs" ${l?.satuan === 'pcs' ? 'selected' : ''}>pcs (satuan)</option>
+             <option value="m" ${l?.satuan === 'm' ? 'selected' : ''}>m (meter)</option>
            </select></div>
          <div class="field"><label>Harga per satuan (Rp)</label>
            <input class="input" name="harga" type="number" inputmode="numeric" min="0" step="500" value="${l?.harga ?? 0}"></div>
-         <div class="field"><label>Estimasi selesai (hari)</label>
-           <input class="input" name="durasi" type="number" inputmode="numeric" min="1" value="${l?.durasi ?? 2}"></div>
+
          <div class="field"><label><input type="checkbox" name="aktif" ${l?.aktif === false ? '' : 'checked'}> Tampilkan di halaman kasir</label></div>`,
         (v) => {
           if (!v.nama.trim()) return U.toast('Nama layanan wajib diisi');
@@ -1337,8 +1472,8 @@ window.Views = (function () {
             id: l?.id,
             nama: v.nama.trim(),
             satuan: v.satuan,
+            kategoriId: v.kategoriId,
             harga: Number(v.harga) || 0,
-            durasi: Math.max(1, Number(v.durasi) || 1),
             aktif: !!v.aktif,
           });
           gambar();
@@ -1347,14 +1482,89 @@ window.Views = (function () {
       );
     }
 
+    /* ---- Kategori ---- */
+    const barisKategori = el.querySelector('#barisKategori');
+
+    function gambarKategori() {
+      const dipakai = (id) => DB.layanan().filter((l) => l.kategoriId === id).length;
+      barisKategori.innerHTML = DB.kategori().length
+        ? DB.kategori()
+            .slice()
+            .sort((a, b) => a.jam - b.jam)
+            .map(
+              (k) => `<tr>
+                <td><b>${esc(k.nama)}</b></td>
+                <td>${lamaTeks(k.jam)}</td>
+                <td>${dipakai(k.id)} layanan</td>
+                <td class="right" style="white-space:nowrap">
+                  <button class="btn btn-sm" data-ubahkat="${k.id}">Ubah</button>
+                  <button class="btn btn-sm btn-danger" data-hapuskat="${k.id}">Hapus</button>
+                </td>
+              </tr>`
+            )
+            .join('')
+        : '<tr><td colspan="4" class="muted">Belum ada kategori.</td></tr>';
+    }
+
+    function formKategori(k) {
+      formModal(
+        k ? 'Ubah Kategori' : 'Tambah Kategori',
+        `<div class="field"><label>Nama kategori</label>
+           <input class="input" name="nama" value="${esc(k?.nama || '')}" placeholder="Ekspres 6 Jam"></div>
+         <div class="field"><label>Lama pengerjaan (jam)</label>
+           <input class="input" name="jam" type="number" inputmode="numeric" min="1" value="${k?.jam ?? 24}">
+           <small class="muted">Isi dalam jam: 6 untuk ekspres, 24 untuk satu hari, 72 untuk tiga hari.</small></div>`,
+        (v) => {
+          try {
+            DB.simpanKategori({ id: k?.id, nama: v.nama, jam: v.jam });
+          } catch (err) {
+            return U.toast(err.message);
+          }
+          gambarKategori();
+          gambar();
+          U.toast('Kategori tersimpan');
+        }
+      );
+    }
+
+    el.querySelector('#btnTambahKategori').addEventListener('click', () => formKategori(null));
+
+    barisKategori.addEventListener('click', async (e) => {
+      const ubah = e.target.closest('[data-ubahkat]');
+      if (ubah) return formKategori(DB.cariKategori(ubah.dataset.ubahkat));
+
+      const hapus = e.target.closest('[data-hapuskat]');
+      if (!hapus) return;
+      const k = DB.cariKategori(hapus.dataset.hapuskat);
+      const ya = await U.konfirmasi('Hapus kategori?', `${k.nama} akan dihapus.`, 'Hapus');
+      if (!ya) return;
+      try {
+        DB.hapusKategori(k.id);
+      } catch (err) {
+        return U.toast(err.message);
+      }
+      gambarKategori();
+      gambar();
+      U.toast('Kategori dihapus');
+    });
+
     el.querySelector('#btnTambah').addEventListener('click', () => formLayanan(null));
 
     /* Ekspor memakai CSV, bukan JSON: berkasnya bisa dibuka dan disunting di
        Excel, dan hasil suntingannya bisa langsung dimasukkan lagi lewat
        Impor. Judul kolomnya sama persis dengan yang dikenali pembaca impor. */
     el.querySelector('#btnEksporLayanan').addEventListener('click', () => {
-      const baris = [['nama', 'satuan', 'harga', 'durasi', 'aktif']]
-        .concat(DB.layanan().map((l) => [l.nama, l.satuan, l.harga, l.durasi, l.aktif === false ? 'tidak' : 'ya']))
+      const baris = [['nama', 'kategori', 'satuan', 'harga', 'jam', 'aktif']]
+        .concat(
+          DB.layanan().map((l) => [
+            l.nama,
+            DB.cariKategori(l.kategoriId)?.nama || '',
+            l.satuan,
+            l.harga,
+            DB.jamLayanan(l),
+            l.aktif === false ? 'tidak' : 'ya',
+          ])
+        )
         .map((k) => k.map((v) => (/[",;\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v)).join(','))
         .join('\n');
       // BOM di depan supaya Excel membaca huruf beraksen dengan benar.
@@ -1367,7 +1577,7 @@ window.Views = (function () {
       U.toast(`${DB.layanan().length} layanan diekspor`);
     });
 
-    el.querySelector('#btnImporLayanan').addEventListener('click', () => imporLayanan(gambar));
+    el.querySelector('#btnImporLayanan').addEventListener('click', () => imporLayanan(() => { gambar(); gambarKategori(); }));
 
     tbody.addEventListener('click', async (e) => {
       const ubah = e.target.closest('[data-ubah]');
@@ -1385,6 +1595,7 @@ window.Views = (function () {
     });
 
     gambar();
+    gambarKategori();
   }
 
   /* ================= PENGGUNA (khusus owner) ================= */
@@ -1634,7 +1845,18 @@ window.Views = (function () {
             Ukurannya tertulis di kertas atau kotak printer.</small>
           </div>
           <div class="field">
+            <label for="tCetak">Yang dicetak saat pesanan disimpan</label>
+            <select class="input" id="tCetak">
+              <option value="pelanggan"${t.cetakSaatSimpan === 'toko' || t.cetakSaatSimpan === 'dua' ? '' : ' selected'}>Struk pelanggan saja</option>
+              <option value="toko"${t.cetakSaatSimpan === 'toko' ? ' selected' : ''}>Label toko saja</option>
+              <option value="dua"${t.cetakSaatSimpan === 'dua' ? ' selected' : ''}>Keduanya (2 lembar)</option>
+            </select>
+            <small class="muted">Label toko menonjolkan nama pelanggan dan waktu selesai, untuk ditempel di keranjang cucian.</small>
+          </div>
+          <div class="field">
             <button class="btn btn-block" id="btnTesCetak" type="button">🖨️ Tes cetak struk contoh</button>
+            <div class="mt"></div>
+            <button class="btn btn-block" id="btnTesLabel" type="button">🏷️ Tes cetak label toko</button>
             <small class="muted">Mencetak satu struk contoh tanpa membuat pesanan.</small>
           </div>
           <div class="field">
@@ -1691,6 +1913,7 @@ window.Views = (function () {
         telp: el.querySelector('#tTelp').value.trim(),
         catatanStruk: el.querySelector('#tCatatan').value.trim(),
         lebarStruk: el.querySelector('#tLebar').value,
+        cetakSaatSimpan: el.querySelector('#tCetak').value,
       });
       window.SegarkanMerek();
       U.toast('Data toko tersimpan');
@@ -1747,6 +1970,13 @@ window.Views = (function () {
       if (dipilih !== semula) DB.simpanToko({ lebarStruk: dipilih });
       Receipt.cetak(Receipt.contoh());
       U.toast(`Mencetak struk contoh ${dipilih} mm`);
+    });
+
+    el.querySelector('#btnTesLabel').addEventListener('click', () => {
+      const dipilih = el.querySelector('#tLebar').value;
+      if (dipilih !== DB.toko().lebarStruk) DB.simpanToko({ lebarStruk: dipilih });
+      Receipt.cetak(Receipt.contoh(), 'toko');
+      U.toast(`Mencetak label toko contoh ${dipilih} mm`);
     });
 
     el.querySelector('#btnCadanganOtomatis')?.addEventListener('click', async () => {

@@ -291,6 +291,23 @@ tbody tr:last-child td { border-bottom: 0; }
 .lupa { text-align: left; }
 .lupa .field { margin-bottom: 10px; }
 
+/* Kartu keranjang yang baru masuk berkedip sebentar, supaya mata kasir
+   langsung tahu ke mana harus mengisi jumlah. */
+@keyframes masukKeranjang {
+  0%   { background: var(--brand-soft); transform: scale(0.985); }
+  60%  { background: var(--brand-soft); transform: scale(1); }
+  100% { background: transparent; }
+}
+.cart-item.baru-masuk { animation: masukKeranjang 0.9s ease-out; border-radius: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cart-item.baru-masuk { animation: none; background: var(--brand-soft); border-radius: 12px; }
+}
+
+.seg-wrap { flex-wrap: wrap; margin-bottom: 10px; }
+.petunjuk-ok { font-size: 13px; color: var(--ok); }
+.svc-kat { font-size: 11px; color: var(--muted); display: block; margin-top: 2px; }
+
 .tombol-angka { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .tombol-angka button {
   min-height: 62px;

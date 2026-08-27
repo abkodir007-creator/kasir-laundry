@@ -17,7 +17,18 @@ window.Receipt = (function () {
 
   const ukuran = () => UKURAN[String(DB.toko().lebarStruk) === '80' ? 80 : 58];
 
-  function html(p) {
+  /* Dua bentuk struk untuk dua pembaca yang berbeda:
+
+     - 'pelanggan' : bukti pembayaran. Rincian harga yang menonjol.
+     - 'toko'      : label yang menempel di keranjang cucian. Yang dibutuhkan
+                     pegawai cuma dua hal dari jarak satu meter — punya siapa
+                     dan kapan harus selesai — jadi keduanya dicetak besar dan
+                     rincian harga sengaja dikecilkan. */
+  function html(p, jenis) {
+    return String(jenis) === 'toko' ? htmlToko(p) : htmlPelanggan(p);
+  }
+
+  function htmlPelanggan(p) {
     const t = DB.toko();
     const u = ukuran();
     const baris = p.item
@@ -63,7 +74,7 @@ window.Receipt = (function () {
     <tr><td>No.</td><td class="r">${U.esc(p.kode)}</td></tr>
     <tr><td>Tanggal</td><td class="r">${U.tanggalJam(p.dibuat)}</td></tr>
     <tr><td>Pelanggan</td><td class="r">${U.esc(p.pelanggan.nama)}</td></tr>
-    <tr><td>Estimasi</td><td class="r">${U.tanggal(p.estimasiSelesai)}</td></tr>
+    <tr><td>Estimasi</td><td class="r">${U.estimasi(p.estimasiSelesai)}</td></tr>
     ${p.kasir && p.kasir !== '-' ? `<tr><td>Kasir</td><td class="r">${U.esc(p.kasir)}</td></tr>` : ''}
   </table>
   <div class="sep"></div>
@@ -89,15 +100,82 @@ window.Receipt = (function () {
 </body></html>`;
   }
 
+  function htmlToko(p) {
+    const t = DB.toko();
+    const u = ukuran();
+    const baris = p.item
+      .map(
+        (i) => `<tr><td>${U.esc(i.nama)}</td>
+                <td class="r">${U.angka(i.qty)} ${U.esc(i.satuan)}</td></tr>`
+      )
+      .join('');
+    const sisa = Math.max(0, p.total - p.dibayar);
+
+    return `<!DOCTYPE html><html lang="id"><head><meta charset="utf-8">
+<title>Label ${U.esc(p.kode)}</title>
+<style>
+  @page { size: ${u.kertas} auto; margin: ${u.tepi}; }
+  body { font-family: "Courier New", monospace; font-size: ${u.teks}px; color: #000; margin: 0; }
+  .wrap { width: ${u.isi}; margin: 0 auto; }
+  .c { text-align: center; }
+  .r { text-align: right; }
+  .sep { border-top: 1px dashed #000; margin: 5px 0; }
+  .garis-tebal { border-top: 2px solid #000; margin: 6px 0; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 1px 0; vertical-align: top; overflow-wrap: anywhere; }
+  td.r { white-space: nowrap; padding-left: 4px; }
+  .label { font-size: ${u.kecil}px; letter-spacing: 1px; }
+  .besar { font-size: ${Math.round(u.judul * 1.7)}px; font-weight: bold; line-height: 1.1; overflow-wrap: anywhere; }
+  .sedang { font-size: ${Math.round(u.judul * 1.15)}px; font-weight: bold; line-height: 1.2; }
+  .kecil { font-size: ${u.kecil}px; }
+  .kode { font-size: ${u.total}px; font-weight: bold; }
+</style></head><body>
+<div class="wrap">
+  <div class="c kecil">${U.esc(t.nama)} — LABEL TOKO</div>
+  <div class="c kode">${U.esc(p.kode)}</div>
+  <div class="garis-tebal"></div>
+
+  <div class="label">PELANGGAN</div>
+  <div class="besar">${U.esc(p.pelanggan.nama)}</div>
+  ${p.pelanggan.hp ? `<div class="kecil">${U.esc(p.pelanggan.hp)}</div>` : ''}
+
+  <div class="sep"></div>
+  <div class="label">SELESAI</div>
+  <div class="sedang">${U.esc(U.estimasi(p.estimasiSelesai))}</div>
+
+  <div class="garis-tebal"></div>
+  <table>${baris}</table>
+  <div class="sep"></div>
+  <table>
+    <tr><td class="kecil">Masuk</td><td class="r kecil">${U.tanggalJam(p.dibuat)}</td></tr>
+    ${p.kasir && p.kasir !== '-' ? `<tr><td class="kecil">Kasir</td><td class="r kecil">${U.esc(p.kasir)}</td></tr>` : ''}
+    <tr><td class="kecil">Total</td><td class="r kecil">${U.rupiah(p.total)}</td></tr>
+    <tr><td class="kecil"><b>${sisa > 0 ? 'BELUM LUNAS' : 'LUNAS'}</b></td>
+        <td class="r kecil"><b>${sisa > 0 ? U.rupiah(sisa) : '—'}</b></td></tr>
+  </table>
+  ${p.catatan ? `<div class="sep"></div><div class="kecil">Catatan: ${U.esc(p.catatan)}</div>` : ''}
+</div>
+<script>window.onload = function () { window.print(); }<\/script>
+</body></html>`;
+  }
+
   /** Cetak lewat iframe tersembunyi supaya halaman kasir tidak ikut tercetak. */
-  function cetak(p) {
+  function cetak(p, jenis) {
     const lama = document.getElementById('frameStruk');
     if (lama) lama.remove();
     const frame = document.createElement('iframe');
     frame.id = 'frameStruk';
     frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
     document.body.appendChild(frame);
-    frame.srcdoc = html(p);
+    frame.srcdoc = html(p, jenis);
+  }
+
+  /* Mencetak dua struk berurutan. Jeda satu detik disengaja: dialog cetak
+     Android hanya memegang satu dokumen pada satu waktu, dan tanpa jeda
+     struk kedua menimpa yang pertama sebelum sempat terkirim. */
+  function cetakDua(p) {
+    cetak(p, 'pelanggan');
+    setTimeout(() => cetak(p, 'toko'), 1200);
   }
 
   function teks(p) {
@@ -113,7 +191,7 @@ window.Receipt = (function () {
       (p.diskon ? `Diskon: -${U.rupiah(p.diskon)}\n` : '') +
       `*Total: ${U.rupiah(p.total)}*\n` +
       (sisa > 0 ? `Sisa bayar: ${U.rupiah(sisa)}\n` : `Status: LUNAS\n`) +
-      `Estimasi selesai: ${U.tanggal(p.estimasiSelesai)}\n\n` +
+      `Estimasi selesai: ${U.estimasi(p.estimasiSelesai)}\n\n` +
       `Terima kasih 🙏`
     );
   }
@@ -149,5 +227,5 @@ window.Receipt = (function () {
     };
   }
 
-  return { cetak, teks, kirimWA, html, contoh };
+  return { cetak, cetakDua, teks, kirimWA, html, contoh };
 })();

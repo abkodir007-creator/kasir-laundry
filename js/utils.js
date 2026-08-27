@@ -27,6 +27,16 @@ window.U = (function () {
     return t.toISOString();
   };
 
+  const tambahJam = (iso, jam) => new Date(new Date(iso).getTime() + Number(jam || 0) * 3600000).toISOString();
+
+  /* Tampilan waktu selesai. Untuk layanan ekspres, tanggal saja tidak cukup —
+     "selesai hari ini" tidak memberi tahu pelanggan jam berapa harus datang.
+     Maka jam ikut ditampilkan kalau targetnya kurang dari dua hari lagi. */
+  const estimasi = (iso) => {
+    const selisih = new Date(iso) - Date.now();
+    return selisih < 48 * 3600000 ? tanggalJam(iso) : tanggal(iso);
+  };
+
   const idBaru = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
   /** Escape teks sebelum masuk ke innerHTML. */
@@ -126,6 +136,8 @@ window.U = (function () {
     let kHarga = 1;
     let kSatuan = -1;
     let kDurasi = -1;
+    let kKategori = -1;
+    let kJam = -1;
     let mulai = 0;
 
     const kepala = pisah(barisan[0]).map((x) => x.toLowerCase());
@@ -134,11 +146,15 @@ window.U = (function () {
       const iHarga = kepala.findIndex((x) => /harga|tarif|price|biaya/.test(x));
       const iSatuan = kepala.findIndex((x) => /satuan|unit|uom/.test(x));
       const iDurasi = kepala.findIndex((x) => /durasi|estimasi|lama|hari|day/.test(x));
+      const iKategori = kepala.findIndex((x) => /kategori|categor|paket|tipe|type/.test(x));
+      const iJam = kepala.findIndex((x) => /^jam$|jam\b|hour/.test(x));
       if (iNama >= 0 || iHarga >= 0) {
         kNama = iNama >= 0 ? iNama : 0;
         kHarga = iHarga >= 0 ? iHarga : 1;
         kSatuan = iSatuan;
-        kDurasi = iDurasi;
+        kDurasi = iJam >= 0 ? -1 : iDurasi;   // kolom jam lebih tepat daripada hari
+        kKategori = iKategori;
+        kJam = iJam;
         mulai = 1;
       }
     }
@@ -166,23 +182,31 @@ window.U = (function () {
         dilewati += 1;
         continue;
       }
-      data.push(rapikanLayanan(nama, harga, kSatuan >= 0 ? kolom[kSatuan] : '', kDurasi >= 0 ? kolom[kDurasi] : ''));
+      data.push(
+        rapikanLayanan(nama, harga, kSatuan >= 0 ? kolom[kSatuan] : '', kDurasi >= 0 ? kolom[kDurasi] : '', {
+          kategori: kKategori >= 0 ? kolom[kKategori] : '',
+          jam: kJam >= 0 ? kolom[kJam] : '',
+        })
+      );
     }
 
     return { data: data.filter(Boolean), dilewati: dilewati + (data.length - data.filter(Boolean).length) };
   };
 
-  function rapikanLayanan(nama, harga, satuan, durasi) {
+  function rapikanLayanan(nama, harga, satuan, durasi, tambahan) {
     const bersihNama = String(nama || '').trim().replace(/^["\u2018\u2019]|["\u2018\u2019]$/g, '');
     if (!bersihNama || !isFinite(harga) || harga < 0) return null;
     const s = String(satuan || '').toLowerCase();
     const hari = parseInt(String(durasi || '').replace(/[^0-9]/g, ''), 10);
+    const jamKolom = parseInt(String(tambahan?.jam || '').replace(/[^0-9]/g, ''), 10);
     return {
+      kategori: String(tambahan?.kategori || '').trim(),
+      jam: jamKolom > 0 && jamKolom <= 24 * 60 ? jamKolom : null,
       nama: bersihNama.slice(0, 60),
       harga: Math.round(harga),
       // pcs dipakai kalau memang tertulis begitu; selain itu kg, satuan
       // paling lazim di laundry.
-      satuan: /pcs|pc|buah|potong|item|unit|lembar|set/.test(s) ? 'pcs' : 'kg',
+      satuan: /^m$|meter|mtr|m2|persegi/.test(s) ? 'm' : /pcs|pc|buah|potong|item|unit|lembar|set/.test(s) ? 'pcs' : 'kg',
       durasi: hari > 0 && hari < 60 ? hari : 2,
     };
   }
@@ -320,5 +344,5 @@ window.U = (function () {
       modal.addEventListener('close', () => resolve(modal.returnValue === 'ya'), { once: true });
     });
 
-  return { rupiah, angka, tanggal, jam, tanggalJam, hariKunci, hariIni, tambahHari, idBaru, esc, waNomor, uraiKontak, uraiLayanan, bacaGambarKecil, toast, konfirmasi };
+  return { rupiah, angka, tanggal, jam, tanggalJam, hariKunci, hariIni, tambahHari, tambahJam, estimasi, idBaru, esc, waNomor, uraiKontak, uraiLayanan, bacaGambarKecil, toast, konfirmasi };
 })();

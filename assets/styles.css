@@ -185,9 +185,13 @@ tbody tr:last-child td { border-bottom: 0; }
 .cart-items .empty { padding: 28px 16px; }
 .cart-item { padding: 12px 14px; border-bottom: 1px solid var(--border); }
 .cart-item-top { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
-.qty { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+/* flex-wrap wajib: di layar HP yang sempit, tombol Hapus meluber keluar
+   kartu keranjang tanpa ini. Tombolnya juga tidak boleh menyusut, supaya
+   tulisannya tidak terpotong. */
+.qty { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.qty .btn { flex: 0 0 auto; }
 .qty button { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); font-size: 20px; font-weight: 700; cursor: pointer; }
-.qty input { width: 76px; text-align: center; min-height: 40px; padding: 6px; border: 1px solid var(--border); border-radius: 10px; }
+.qty input { width: 72px; flex: 0 0 auto; text-align: center; min-height: 40px; padding: 6px; border: 1px solid var(--border); border-radius: 10px; }
 .cart-foot { border-top: 1px solid var(--border); padding: 14px 16px; background: var(--surface-2); border-radius: 0 0 var(--radius) var(--radius); }
 .sum-line { display: flex; justify-content: space-between; padding: 4px 0; font-size: 14px; }
 .sum-total { display: flex; justify-content: space-between; padding: 8px 0 12px; font-size: 20px; font-weight: 800; }
@@ -306,7 +310,13 @@ tbody tr:last-child td { border-bottom: 0; }
 
 .seg-wrap { flex-wrap: wrap; margin-bottom: 10px; }
 .petunjuk-ok { font-size: 13px; color: var(--ok); }
-.svc-kat { font-size: 11px; color: var(--muted); display: block; margin-top: 2px; }
+/* Tombol pilihan estimasi: lama pengerjaan di atas, namanya di bawah,
+   supaya kasir membaca angkanya lebih dulu — itu yang dijanjikan ke
+   pelanggan, bukan nama paketnya. */
+#segEstimasi { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 6px; }
+#segEstimasi button { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 1px; padding: 8px 4px; line-height: 1.15; min-height: var(--tap); }
+.est-lama { font-size: 14px; font-weight: 700; }
+.est-nama { font-size: 11px; opacity: 0.75; }
 
 .tombol-angka { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .tombol-angka button {
@@ -347,8 +357,15 @@ tbody tr:last-child td { border-bottom: 0; }
   .app { flex-direction: column-reverse; }
   .nav { width: auto; flex: 0 0 auto; flex-direction: row; padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); }
   .brand, .nav-foot { display: none; }
-  .nav-list { flex-direction: row; }
-  .nav-item { flex: 1; min-width: 0; flex-direction: column; gap: 2px; padding: 6px 2px; font-size: 10px; min-height: 56px; justify-content: center; text-align: center; overflow: hidden; white-space: nowrap; }
+  /* Sepuluh menu tidak muat di layar HP: totalnya 577px pada layar 360px,
+     dan tanpa ini seluruh halaman ikut bisa digeser ke samping — isian
+     keranjang jadi separuh keluar layar saat kasir tidak sengaja menggeser.
+     Sekarang yang menggulir hanya baris menunya sendiri. */
+  .nav-list { flex-direction: row; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .nav-list::-webkit-scrollbar { display: none; }
+  .nav { max-width: 100%; overflow: hidden; }
+  .app { max-width: 100%; overflow-x: hidden; }
+  .nav-item { flex: 0 0 auto; min-width: 60px; flex-direction: column; gap: 2px; padding: 6px 2px; font-size: 10px; min-height: 56px; justify-content: center; text-align: center; overflow: hidden; white-space: nowrap; }
   .nav-item span { font-size: 20px; }
   .main { padding: 14px; }
 }

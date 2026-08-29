@@ -75,6 +75,7 @@ window.Receipt = (function () {
     <tr><td>Tanggal</td><td class="r">${U.tanggalJam(p.dibuat)}</td></tr>
     <tr><td>Pelanggan</td><td class="r">${U.esc(p.pelanggan.nama)}</td></tr>
     <tr><td>Estimasi</td><td class="r">${U.estimasi(p.estimasiSelesai)}</td></tr>
+    ${p.estimasiNama ? `<tr><td>Layanan</td><td class="r">${U.esc(p.estimasiNama)}</td></tr>` : ''}
     ${p.kasir && p.kasir !== '-' ? `<tr><td>Kasir</td><td class="r">${U.esc(p.kasir)}</td></tr>` : ''}
   </table>
   <div class="sep"></div>
@@ -140,7 +141,7 @@ window.Receipt = (function () {
   ${p.pelanggan.hp ? `<div class="kecil">${U.esc(p.pelanggan.hp)}</div>` : ''}
 
   <div class="sep"></div>
-  <div class="label">SELESAI</div>
+  <div class="label">SELESAI${p.estimasiNama ? ' — ' + U.esc(p.estimasiNama).toUpperCase() : ''}</div>
   <div class="sedang">${U.esc(U.estimasi(p.estimasiSelesai))}</div>
 
   <div class="garis-tebal"></div>

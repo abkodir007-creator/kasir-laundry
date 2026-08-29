@@ -214,7 +214,7 @@ window.Views = (function () {
   }
 
   /* ================= KASIR ================= */
-  const pos = { keranjang: [], cari: '', kategori: 'semua' };
+  const pos = { keranjang: [], cari: '', estimasi: null };
 
   function kasir(el) {
     el.innerHTML = `
@@ -228,16 +228,6 @@ window.Views = (function () {
         <div>
           <div class="filters">
             <input class="input" id="cariLayanan" type="search" placeholder="Cari layanan…" value="${esc(pos.cari)}">
-          </div>
-          <div class="seg seg-wrap" id="filterKategori">
-            <button type="button" class="${pos.kategori === 'semua' ? 'is-active' : ''}" data-kat="semua">Semua</button>
-            ${DB.kategoriAktif()
-              .slice()
-              .sort((a, b) => a.jam - b.jam)
-              .map(
-                (k) => `<button type="button" class="${pos.kategori === k.id ? 'is-active' : ''}" data-kat="${k.id}">${esc(k.nama)}</button>`
-              )
-              .join('')}
           </div>
           <div class="svc-grid" id="svcGrid"></div>
         </div>
@@ -263,6 +253,27 @@ window.Views = (function () {
           </div>
           <div class="cart-items" id="cartItems"></div>
           <div class="cart-foot">
+            <div class="field">
+              <label>Estimasi selesai</label>
+              <div class="seg seg-wrap" id="segEstimasi">
+                ${DB.kategoriAktif()
+                  .slice()
+                  .sort((a, b) => a.jam - b.jam)
+                  .map(
+                    (k) => {
+                      // Nama yang isinya sama dengan lamanya ("7 Hari") tidak
+                      // perlu ditulis dua kali di tombol yang sama.
+                      const sama = k.nama.replace(/\s+/g, '').toLowerCase() === lamaTeks(k.jam).replace(/\s+/g, '').toLowerCase();
+                      return `<button type="button" data-jam="${k.jam}" data-nama="${esc(k.nama)}">
+                        <span class="est-lama">${esc(lamaTeks(k.jam))}</span>
+                        ${sama ? '' : `<span class="est-nama">${esc(k.nama)}</span>`}
+                      </button>`;
+                    }
+                  )
+                  .join('')}
+              </div>
+              <small class="muted" id="infoEstimasi">&nbsp;</small>
+            </div>
             <div class="sum-line"><span>Subtotal</span><b id="sumSubtotal">Rp 0</b></div>
             <div class="field mt">
               <label for="inpDiskon">Diskon (Rp)</label>
@@ -353,16 +364,13 @@ window.Views = (function () {
 
     function gambarLayanan() {
       const q = pos.cari.toLowerCase();
-      const daftar = DB.layananAktif()
-        .filter((l) => l.nama.toLowerCase().includes(q))
-        .filter((l) => pos.kategori === 'semua' || l.kategoriId === pos.kategori);
+      const daftar = DB.layananAktif().filter((l) => l.nama.toLowerCase().includes(q));
       grid.innerHTML = daftar.length
         ? daftar
             .map(
               (l) => `
           <button class="svc" type="button" data-id="${l.id}">
             <span class="svc-name">${esc(l.nama)}</span>
-            <span class="svc-kat">${esc(DB.cariKategori(l.kategoriId)?.nama || lamaTeks(DB.jamLayanan(l)))}</span>
             <span>
               <span class="svc-price">${U.rupiah(l.harga)}</span>
               <span class="svc-unit">/ ${esc(l.satuan)}</span>
@@ -407,13 +415,48 @@ window.Views = (function () {
       el.querySelector('#sumSubtotal').textContent = U.rupiah(subtotal);
       el.querySelector('#sumTotal').textContent = U.rupiah(total);
       const adaNama = !!el.querySelector('#inpNama').value.trim();
-      el.querySelector('#btnSimpan').disabled = pos.keranjang.length === 0 || !adaNama;
+      el.querySelector('#btnSimpan').disabled = pos.keranjang.length === 0 || !adaNama || !pos.estimasi;
       const info = el.querySelector('#infoKembali');
       if (bayar === 0) info.textContent = 'Belum dibayar — pesanan ditandai "belum lunas".';
       else if (bayar < total) info.textContent = `Kurang ${U.rupiah(total - bayar)} (bayar sebagian).`;
       else info.textContent = `Kembalian ${U.rupiah(bayar - total)}.`;
       return { subtotal, diskon, total, bayar };
     }
+
+    /* ---- Estimasi selesai ----
+
+       Berlaku untuk seluruh nota, bukan per layanan. Sengaja tidak diberi
+       pilihan bawaan: kalau salah satu sudah tersorot sejak awal, kasir
+       cenderung melewatinya, dan janji waktu ke pelanggan jadi asal terisi. */
+    const segEstimasi = el.querySelector('#segEstimasi');
+    const infoEstimasi = el.querySelector('#infoEstimasi');
+
+    function perbaruiEstimasi() {
+      if (!pos.estimasi) {
+        infoEstimasi.textContent = 'Pilih dulu — menentukan janji selesai di nota.';
+        infoEstimasi.className = 'muted';
+        return;
+      }
+      const selesai = U.tambahJam(new Date().toISOString(), pos.estimasi.jam);
+      infoEstimasi.textContent = `Selesai ${U.estimasi(selesai)}`;
+      infoEstimasi.className = 'petunjuk-ok';
+    }
+
+    segEstimasi.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-jam]');
+      if (!b) return;
+      pos.estimasi = { jam: Number(b.dataset.jam), nama: b.dataset.nama };
+      segEstimasi.querySelectorAll('button').forEach((x) => x.classList.remove('is-active'));
+      b.classList.add('is-active');
+      perbaruiEstimasi();
+      hitung();
+    });
+
+    if (pos.estimasi) {
+      const tombol = segEstimasi.querySelector(`[data-jam="${pos.estimasi.jam}"]`);
+      if (tombol) tombol.classList.add('is-active');
+    }
+    perbaruiEstimasi();
 
     /* Begitu layanan diketuk, layar langsung membawa kasir ke isian jumlah.
 
@@ -439,15 +482,6 @@ window.Views = (function () {
       }
     }
 
-    el.querySelector('#filterKategori').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-kat]');
-      if (!b) return;
-      pos.kategori = b.dataset.kat;
-      el.querySelectorAll('#filterKategori button').forEach((x) => x.classList.remove('is-active'));
-      b.classList.add('is-active');
-      gambarLayanan();
-    });
-
     grid.addEventListener('click', (e) => {
       const tombol = e.target.closest('[data-id]');
       if (!tombol) return;
@@ -461,7 +495,6 @@ window.Views = (function () {
           satuan: l.satuan,
           harga: l.harga,
           durasi: l.durasi,
-          jam: DB.jamLayanan(l),
           qty: 1,
         });
       gambarKeranjang();
@@ -519,6 +552,11 @@ window.Views = (function () {
         return U.toast('Nama pelanggan wajib diisi');
       }
 
+      if (!pos.estimasi) {
+        segEstimasi.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return U.toast('Pilih estimasi selesai dulu');
+      }
+
       const item = pos.keranjang.filter((i) => i.qty > 0).map((i) => ({ ...i, subtotal: i.qty * i.harga }));
       if (!item.length) return U.toast('Isi jumlah dulu');
       const { subtotal, diskon, total, bayar } = hitung();
@@ -531,11 +569,14 @@ window.Views = (function () {
         total,
         dibayar: Math.min(bayar, total),
         diterima: bayar,
+        jam: pos.estimasi.jam,
+        estimasiNama: pos.estimasi.nama,
         kasir: Auth.aktif()?.nama,
         metode: el.querySelector('#segMetode .is-active').dataset.metode,
         catatan: el.querySelector('#inpCatatan').value,
       });
       pos.keranjang = [];
+      pos.estimasi = null;
       kasir(el); // reset form
       U.toast(`Pesanan ${p.kode} tersimpan`);
       const mode = DB.toko().cetakSaatSimpan;
@@ -661,7 +702,7 @@ window.Views = (function () {
       <h3>${esc(p.kode)} ${badgeStatus(p.status)}</h3>
       <p class="muted" style="margin-top:-6px">
         ${esc(p.pelanggan.nama)} • ${esc(p.pelanggan.hp || 'tanpa HP')}<br>
-        Masuk ${U.tanggalJam(p.dibuat)} • Estimasi ${U.estimasi(p.estimasiSelesai)}
+        Masuk ${U.tanggalJam(p.dibuat)} • Estimasi ${U.estimasi(p.estimasiSelesai)}${p.estimasiNama ? ` (${esc(p.estimasiNama)})` : ''}
         ${p.kasir && p.kasir !== '-' ? `<br>Diterima oleh ${esc(p.kasir)}` : ''}
       </p>
       <div class="table-wrap"><table>
@@ -1325,7 +1366,7 @@ window.Views = (function () {
       <div class="field">
         <label for="teksLayanan">Atau tempel di sini</label>
         <textarea class="input" id="teksLayanan" style="min-height:150px; font-family:ui-monospace, monospace; font-size:13px"
-          placeholder="nama,kategori,satuan,harga,jam&#10;Cuci Setrika,Reguler 3 Hari,kg,8000,72&#10;Karpet,Kilat 1 Hari,m,15000,24&#10;Setrika Saja 5000"></textarea>
+          placeholder="nama,satuan,harga&#10;Cuci Setrika,kg,8000&#10;Karpet,m,15000&#10;Setrika Saja 5000"></textarea>
       </div>
       <div id="pratinjauLayanan"></div>
       <div class="modal-actions">
@@ -1361,8 +1402,7 @@ window.Views = (function () {
               ? `<div class="table-wrap mt"><table><tbody>${contoh}</tbody></table></div>
                  ${data.length > 4 ? `<p class="muted" style="margin:6px 0 0">…dan ${data.length - 4} lainnya</p>` : ''}
                  <p class="muted" style="margin:6px 0 0">Periksa harga dan satuannya dulu.
-                 Satuan yang tidak dikenali dianggap kg. Kategori yang belum ada akan dibuatkan
-                 sendiri dari kolom kategori atau jam — semuanya masih bisa diubah setelah masuk.</p>`
+                 Satuan yang tidak dikenali dianggap kg, dan masih bisa diubah setelah masuk.</p>`
               : '<p class="muted" style="margin:6px 0 0">Belum ada baris yang bisa dibaca.</p>'
           }
         </div>`;
@@ -1402,20 +1442,23 @@ window.Views = (function () {
         </div>
       </div>
       <div class="card"><div class="table-wrap"><table>
-        <thead><tr><th>Nama</th><th>Kategori</th><th>Satuan</th><th>Harga</th><th>Estimasi</th><th>Status</th><th class="right">Aksi</th></tr></thead>
+        <thead><tr><th>Nama</th><th>Satuan</th><th>Harga</th><th>Status</th><th class="right">Aksi</th></tr></thead>
         <tbody id="barisLayanan"></tbody>
       </table></div></div>
 
       <div class="card card-pad mt">
         <div class="row" style="justify-content:space-between; align-items:center; flex-wrap:wrap">
           <div>
-            <b>Kategori &amp; Lama Pengerjaan</b>
-            <p class="muted" style="margin:2px 0 0">Kategori menentukan janji waktu selesai pada nota.</p>
+            <b>Pilihan Estimasi Selesai</b>
+            <p class="muted" style="margin:2px 0 0">
+              Muncul di keranjang saat kasir membuat nota. Layanan tidak lagi terikat satu waktu,
+              jadi satu layanan cukup didaftarkan sekali.
+            </p>
           </div>
-          <button class="btn btn-sm" id="btnTambahKategori" type="button">+ Tambah Kategori</button>
+          <button class="btn btn-sm" id="btnTambahKategori" type="button">+ Tambah Pilihan</button>
         </div>
         <div class="table-wrap mt"><table>
-          <thead><tr><th>Kategori</th><th>Lama</th><th>Dipakai</th><th class="right">Aksi</th></tr></thead>
+          <thead><tr><th>Nama</th><th>Lama</th><th>Dipakai di nota</th><th class="right">Aksi</th></tr></thead>
           <tbody id="barisKategori"></tbody>
         </table></div>
       </div>`;
@@ -1427,14 +1470,8 @@ window.Views = (function () {
         .map(
           (l) => `<tr>
             <td><b>${esc(l.nama)}</b></td>
-            <td>${
-              DB.cariKategori(l.kategoriId)
-                ? `<span class="pill pill-info">${esc(DB.cariKategori(l.kategoriId).nama)}</span>`
-                : '<span class="pill pill-muted">Tanpa kategori</span>'
-            }</td>
             <td>${esc(l.satuan)}</td>
             <td>${U.rupiah(l.harga)}</td>
-            <td>${lamaTeks(DB.jamLayanan(l))}</td>
             <td>${l.aktif === false ? '<span class="pill pill-muted">Nonaktif</span>' : '<span class="pill pill-ok">Aktif</span>'}</td>
             <td class="right" style="white-space:nowrap">
               <button class="btn btn-sm" data-ubah="${l.id}">Ubah</button>
@@ -1450,12 +1487,6 @@ window.Views = (function () {
         l ? 'Ubah Layanan' : 'Tambah Layanan',
         `<div class="field"><label>Nama layanan</label>
            <input class="input" name="nama" value="${esc(l?.nama || '')}" placeholder="Cuci Setrika"></div>
-         <div class="field"><label>Kategori (menentukan waktu selesai)</label>
-           <select class="input" name="kategoriId">
-             ${DB.kategoriAktif()
-               .map((k) => `<option value="${k.id}" ${l?.kategoriId === k.id ? 'selected' : ''}>${esc(k.nama)} — ${lamaTeks(k.jam)}</option>`)
-               .join('')}
-           </select></div>
          <div class="field"><label>Satuan</label>
            <select class="input" name="satuan">
              <option value="kg" ${l?.satuan === 'kg' ? 'selected' : ''}>kg (berat)</option>
@@ -1472,7 +1503,6 @@ window.Views = (function () {
             id: l?.id,
             nama: v.nama.trim(),
             satuan: v.satuan,
-            kategoriId: v.kategoriId,
             harga: Number(v.harga) || 0,
             aktif: !!v.aktif,
           });
@@ -1486,7 +1516,7 @@ window.Views = (function () {
     const barisKategori = el.querySelector('#barisKategori');
 
     function gambarKategori() {
-      const dipakai = (id) => DB.layanan().filter((l) => l.kategoriId === id).length;
+      const dipakai = (jam) => DB.pesanan().filter((p) => Number(p.jamPengerjaan) === Number(jam)).length;
       barisKategori.innerHTML = DB.kategori().length
         ? DB.kategori()
             .slice()
@@ -1495,7 +1525,7 @@ window.Views = (function () {
               (k) => `<tr>
                 <td><b>${esc(k.nama)}</b></td>
                 <td>${lamaTeks(k.jam)}</td>
-                <td>${dipakai(k.id)} layanan</td>
+                <td>${dipakai(k.jam)} nota</td>
                 <td class="right" style="white-space:nowrap">
                   <button class="btn btn-sm" data-ubahkat="${k.id}">Ubah</button>
                   <button class="btn btn-sm btn-danger" data-hapuskat="${k.id}">Hapus</button>
@@ -1503,14 +1533,14 @@ window.Views = (function () {
               </tr>`
             )
             .join('')
-        : '<tr><td colspan="4" class="muted">Belum ada kategori.</td></tr>';
+        : '<tr><td colspan="4" class="muted">Belum ada pilihan estimasi.</td></tr>';
     }
 
     function formKategori(k) {
       formModal(
-        k ? 'Ubah Kategori' : 'Tambah Kategori',
-        `<div class="field"><label>Nama kategori</label>
-           <input class="input" name="nama" value="${esc(k?.nama || '')}" placeholder="Ekspres 6 Jam"></div>
+        k ? 'Ubah Pilihan Estimasi' : 'Tambah Pilihan Estimasi',
+        `<div class="field"><label>Nama pilihan</label>
+           <input class="input" name="nama" value="${esc(k?.nama || '')}" placeholder="Kilat"></div>
          <div class="field"><label>Lama pengerjaan (jam)</label>
            <input class="input" name="jam" type="number" inputmode="numeric" min="1" value="${k?.jam ?? 24}">
            <small class="muted">Isi dalam jam: 6 untuk ekspres, 24 untuk satu hari, 72 untuk tiga hari.</small></div>`,
@@ -1522,7 +1552,7 @@ window.Views = (function () {
           }
           gambarKategori();
           gambar();
-          U.toast('Kategori tersimpan');
+          U.toast('Pilihan estimasi tersimpan');
         }
       );
     }
@@ -1536,7 +1566,7 @@ window.Views = (function () {
       const hapus = e.target.closest('[data-hapuskat]');
       if (!hapus) return;
       const k = DB.cariKategori(hapus.dataset.hapuskat);
-      const ya = await U.konfirmasi('Hapus kategori?', `${k.nama} akan dihapus.`, 'Hapus');
+      const ya = await U.konfirmasi('Hapus pilihan estimasi?', `${k.nama} — ${lamaTeks(k.jam)} akan dihapus. Nota lama tidak terpengaruh.`, 'Hapus');
       if (!ya) return;
       try {
         DB.hapusKategori(k.id);
@@ -1545,7 +1575,7 @@ window.Views = (function () {
       }
       gambarKategori();
       gambar();
-      U.toast('Kategori dihapus');
+      U.toast('Pilihan estimasi dihapus');
     });
 
     el.querySelector('#btnTambah').addEventListener('click', () => formLayanan(null));
@@ -1554,17 +1584,8 @@ window.Views = (function () {
        Excel, dan hasil suntingannya bisa langsung dimasukkan lagi lewat
        Impor. Judul kolomnya sama persis dengan yang dikenali pembaca impor. */
     el.querySelector('#btnEksporLayanan').addEventListener('click', () => {
-      const baris = [['nama', 'kategori', 'satuan', 'harga', 'jam', 'aktif']]
-        .concat(
-          DB.layanan().map((l) => [
-            l.nama,
-            DB.cariKategori(l.kategoriId)?.nama || '',
-            l.satuan,
-            l.harga,
-            DB.jamLayanan(l),
-            l.aktif === false ? 'tidak' : 'ya',
-          ])
-        )
+      const baris = [['nama', 'satuan', 'harga', 'aktif']]
+        .concat(DB.layanan().map((l) => [l.nama, l.satuan, l.harga, l.aktif === false ? 'tidak' : 'ya']))
         .map((k) => k.map((v) => (/[",;\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v)).join(','))
         .join('\n');
       // BOM di depan supaya Excel membaca huruf beraksen dengan benar.

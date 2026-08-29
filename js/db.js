@@ -263,6 +263,43 @@ window.DB = (function () {
     return Math.max(1, Number(l?.durasi) || 1) * 24;
   }
 
+  /* ---------- Harga per kecepatan ----------
+
+     Harga sebenarnya milik PASANGAN layanan x estimasi, bukan milik salah
+     satunya: Cuci Komplit 6 jam 15.000, 1 hari 10.000, 3 hari 6.000. Maka
+     tiap layanan boleh menyimpan tabel harga kecil, hargaPer, yang dikunci
+     dengan id pilihan estimasi.
+
+     Dua kelakuan yang sengaja dibedakan:
+
+     - Layanan tanpa tabel harga sama sekali memakai harga dasarnya untuk
+       semua kecepatan. Ini yang membuat layanan lama tetap jalan tanpa
+       disentuh.
+     - Layanan yang PUNYA tabel harga hanya tersedia pada kecepatan yang
+       harganya diisi. Diam-diam memakai harga reguler untuk pesanan kilat
+       adalah kebocoran pendapatan, jadi lebih baik ditolak terang-terangan. */
+  function punyaTabelHarga(l) {
+    return !!l && !!l.hargaPer && Object.values(l.hargaPer).some((v) => Number(v) > 0);
+  }
+
+  /** { harga, tersedia } untuk satu layanan pada satu pilihan estimasi. */
+  function hargaLayanan(l, kategoriId) {
+    if (!l) return { harga: 0, tersedia: false };
+    if (!punyaTabelHarga(l)) return { harga: Number(l.harga) || 0, tersedia: true };
+
+    const khusus = Number(l.hargaPer?.[kategoriId]) || 0;
+    return khusus > 0
+      ? { harga: khusus, tersedia: true }
+      : { harga: 0, tersedia: false };
+  }
+
+  /** Rentang harga untuk ditampilkan di kartu layanan halaman Kasir. */
+  function rentangHarga(l) {
+    if (!punyaTabelHarga(l)) return { min: Number(l.harga) || 0, maks: Number(l.harga) || 0 };
+    const angka = Object.values(l.hargaPer).map(Number).filter((v) => v > 0);
+    return { min: Math.min(...angka), maks: Math.max(...angka) };
+  }
+
   function simpanKategori(data) {
     const lama = data.id ? cariKategori(data.id) : null;
     const baru = {
@@ -296,6 +333,14 @@ window.DB = (function () {
   const cariLayanan = (id) => state.layanan.find((l) => l.id === id);
 
   function simpanLayanan(data) {
+    if (data.hargaPer) {
+      // Nol dan kosong sama artinya: tidak dilayani pada kecepatan itu.
+      const bersih = {};
+      for (const [k, v] of Object.entries(data.hargaPer)) {
+        if (Number(v) > 0) bersih[k] = Math.round(Number(v));
+      }
+      data = { ...data, hargaPer: bersih };
+    }
     if (data.id) {
       const i = state.layanan.findIndex((l) => l.id === data.id);
       if (i >= 0) state.layanan[i] = { ...state.layanan[i], ...data };
@@ -304,6 +349,21 @@ window.DB = (function () {
     }
     simpan();
     catat('layanan', data.id ? cariLayanan(data.id) : state.layanan[state.layanan.length - 1]);
+  }
+
+  /* Berkas impor menyebut kecepatan dengan namanya ("Kilat"), sedangkan di
+     dalam aplikasi harga dikunci dengan id pilihan estimasi. Judul kolom yang
+     tidak cocok dengan pilihan mana pun diabaikan, bukan dibuatkan pilihan
+     baru — kolom asing di berkas orang lain tidak boleh diam-diam menambah
+     pilihan di layar kasir. */
+  function hargaPerDariNama(peta) {
+    if (!peta) return {};
+    const hasil = {};
+    for (const [nama, nilai] of Object.entries(peta)) {
+      const k = kategori().find((x) => x.nama.trim().toLowerCase() === String(nama).trim().toLowerCase());
+      if (k && Number(nilai) > 0) hasil[k.id] = Math.round(Number(nilai));
+    }
+    return hasil;
   }
 
   /** Masukkan banyak layanan sekaligus. Nama yang sudah ada dilewati, bukan
@@ -326,6 +386,7 @@ window.DB = (function () {
         nama: l.nama.trim(),
         satuan: ['pcs', 'm'].includes(l.satuan) ? l.satuan : 'kg',
         harga: Math.max(0, Math.round(Number(l.harga) || 0)),
+        hargaPer: hargaPerDariNama(l.hargaPerNama),
         durasi: Math.max(1, Number(l.durasi) || 2),
         aktif: l.aktif !== false,
       };
@@ -696,6 +757,7 @@ window.DB = (function () {
     layananDipulihkan: () => layananDipulihkan,
     pengeluaran, cariPengeluaran, simpanPengeluaran, hapusPengeluaran,
     layanan, layananAktif, cariLayanan, simpanLayanan, hapusLayanan, imporLayanan,
+    hargaLayanan, punyaTabelHarga, rentangHarga,
     kategori, kategoriAktif, cariKategori, simpanKategori, hapusKategori, jamLayanan,
     pengguna, cariPengguna, simpanPengguna, hapusPengguna,
     pesanan, cariPesanan, buatPesanan, ubahStatus, lunasi, hapusPesanan,

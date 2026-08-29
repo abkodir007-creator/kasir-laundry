@@ -138,6 +138,7 @@ window.U = (function () {
     let kDurasi = -1;
     let kKategori = -1;
     let kJam = -1;
+    let kepalaAsli = null;
     let mulai = 0;
 
     const kepala = pisah(barisan[0]).map((x) => x.toLowerCase());
@@ -148,6 +149,9 @@ window.U = (function () {
       const iDurasi = kepala.findIndex((x) => /durasi|estimasi|lama|hari|day/.test(x));
       const iKategori = kepala.findIndex((x) => /kategori|categor|paket|tipe|type/.test(x));
       const iJam = kepala.findIndex((x) => /^jam$|jam\b|hour/.test(x));
+      // Kolom sisa yang berisi angka dianggap harga per kecepatan, dengan
+      // judul kolom sebagai nama pilihan estimasinya.
+      kepalaAsli = pisah(barisan[0]);
       if (iNama >= 0 || iHarga >= 0) {
         kNama = iNama >= 0 ? iNama : 0;
         kHarga = iHarga >= 0 ? iHarga : 1;
@@ -186,12 +190,29 @@ window.U = (function () {
         rapikanLayanan(nama, harga, kSatuan >= 0 ? kolom[kSatuan] : '', kDurasi >= 0 ? kolom[kDurasi] : '', {
           kategori: kKategori >= 0 ? kolom[kKategori] : '',
           jam: kJam >= 0 ? kolom[kJam] : '',
+          hargaPer: hargaPerKolom(kepalaAsli, kolom, [kNama, kHarga, kSatuan, kDurasi, kKategori, kJam], keAngka),
         })
       );
     }
 
     return { data: data.filter(Boolean), dilewati: dilewati + (data.length - data.filter(Boolean).length) };
   };
+
+  /* Kolom di luar kolom baku yang berisi angka dibaca sebagai harga per
+     kecepatan; judul kolomnya jadi nama pilihan estimasinya. Berkas ekspor
+     aplikasi ini sendiri berbentuk begitu, jadi hasil ekspor bisa disunting
+     di Excel lalu dimasukkan kembali lengkap dengan tabel harganya. */
+  function hargaPerKolom(kepala, kolom, dipakai, keAngka) {
+    if (!kepala) return null;
+    const hasil = {};
+    for (let i = 0; i < kepala.length; i++) {
+      if (dipakai.includes(i)) continue;
+      const judul = String(kepala[i] || '').trim();
+      const nilai = keAngka(kolom[i]);
+      if (judul && isFinite(nilai) && nilai > 0) hasil[judul] = Math.round(nilai);
+    }
+    return Object.keys(hasil).length ? hasil : null;
+  }
 
   function rapikanLayanan(nama, harga, satuan, durasi, tambahan) {
     const bersihNama = String(nama || '').trim().replace(/^["\u2018\u2019]|["\u2018\u2019]$/g, '');
@@ -202,6 +223,7 @@ window.U = (function () {
     return {
       kategori: String(tambahan?.kategori || '').trim(),
       jam: jamKolom > 0 && jamKolom <= 24 * 60 ? jamKolom : null,
+      hargaPerNama: tambahan?.hargaPer || null,
       nama: bersihNama.slice(0, 60),
       harga: Math.round(harga),
       // pcs dipakai kalau memang tertulis begitu; selain itu kg, satuan

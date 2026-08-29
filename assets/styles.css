@@ -318,6 +318,16 @@ tbody tr:last-child td { border-bottom: 0; }
 .est-lama { font-size: 14px; font-weight: 700; }
 .est-nama { font-size: 11px; opacity: 0.75; }
 
+/* Harga per kecepatan pada formulir layanan: label di kiri, isian di kanan,
+   supaya deretannya terbaca sebagai tabel harga kecil. */
+.harga-kec { display: flex; flex-direction: column; gap: 6px; }
+.harga-baris { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.harga-baris > span { font-size: 14px; }
+.harga-baris .input { max-width: 140px; }
+
+.svc-tidak { color: var(--danger); font-weight: 600; font-size: 12px; }
+.cart-item-tolak { background: var(--danger-soft); border-radius: 12px; padding: 8px; }
+
 .tombol-angka { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .tombol-angka button {
   min-height: 62px;

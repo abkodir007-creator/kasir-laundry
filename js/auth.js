@@ -199,6 +199,7 @@ window.Auth = (function () {
           <p class="masuk-pesan muted" id="tokoPesan">&nbsp;</p>
           <button class="btn btn-primary btn-block" id="tokoKirim" type="submit">Masuk</button>
         </form>
+        <p class="masuk-versi">Versi ${U.versiApp()}</p>
       </div>`;
 
     const pesan = el.querySelector('#tokoPesan');
@@ -290,6 +291,11 @@ window.Auth = (function () {
             <div class="mt"></div>
             <button class="btn btn-block" id="lupaBatal" type="button">Batal</button>
           </form>
+
+          <!-- Angka versi ditaruh di layar masuk supaya bisa dibaca tanpa
+               harus lolos PIN dulu. Perangkat yang tertinggal versi paling
+               sering ketahuan justru di sini. -->
+          <p class="masuk-versi">Versi ${U.versiApp()}</p>
         </div>
       </div>`;
 

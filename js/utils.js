@@ -319,6 +319,45 @@ window.U = (function () {
       pembaca.readAsDataURL(file);
     });
 
+
+  /* Versi berkas yang benar-benar sedang berjalan di perangkat ini.
+
+     Dibaca dari penanda ?v= pada alamat berkas gaya, bukan ditulis ulang
+     sebagai angka tersendiri — supaya tidak pernah bisa berbohong. Kalau
+     perangkat masih menyajikan berkas lama dari simpanan, angka yang
+     tampil ikut angka lama, dan itulah gunanya: pemilik bisa membandingkan
+     angka di tablet dengan angka di HP tanpa menebak-nebak.
+
+     Sebelum ini, setiap kali ada perangkat yang tertinggal versi, tidak ada
+     satu pun cara untuk memastikannya selain mencoba fiturnya satu per satu. */
+  const versiApp = () => {
+    const tautan = document.querySelector('link[rel="stylesheet"][href*="?v="]');
+    const cocok = tautan && tautan.getAttribute('href').match(/[?&]v=([^&"']+)/);
+    return cocok ? cocok[1] : '–';
+  };
+
+  /* Paksa perangkat mengambil versi terbaru: lepas service worker, buang
+     seluruh simpanan berkas, lalu buka alamat baru yang belum pernah ada.
+     Data pesanan TIDAK ikut terhapus — yang dibuang hanya salinan berkas
+     aplikasi, bukan localStorage. */
+  async function perbaruiAplikasi() {
+    try {
+      if ('serviceWorker' in navigator) {
+        const daftar = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(daftar.map((r) => r.unregister().catch(() => {})));
+      }
+      if (window.caches) {
+        const kunci = await caches.keys();
+        await Promise.all(kunci.map((k) => caches.delete(k).catch(() => {})));
+      }
+    } catch (e) {
+      console.warn('Pembersihan simpanan tidak lengkap', e);
+    }
+    const alamat = new URL(location.href);
+    alamat.searchParams.set('segar', String(Date.now()));
+    location.replace(alamat.toString());
+  }
+
   const toast = (pesan) => {
     const el = document.getElementById('toast');
     el.textContent = pesan;
@@ -366,5 +405,5 @@ window.U = (function () {
       modal.addEventListener('close', () => resolve(modal.returnValue === 'ya'), { once: true });
     });
 
-  return { rupiah, angka, tanggal, jam, tanggalJam, hariKunci, hariIni, tambahHari, tambahJam, estimasi, idBaru, esc, waNomor, uraiKontak, uraiLayanan, bacaGambarKecil, toast, konfirmasi };
+  return { rupiah, angka, tanggal, jam, tanggalJam, hariKunci, hariIni, tambahHari, tambahJam, estimasi, idBaru, esc, waNomor, uraiKontak, uraiLayanan, bacaGambarKecil, toast, konfirmasi, versiApp, perbaruiAplikasi };
 })();

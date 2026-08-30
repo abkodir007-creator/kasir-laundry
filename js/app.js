@@ -157,18 +157,51 @@
      sudah diperbarui. Begitu pekerja baru mengambil alih, halaman dimuat ulang
      sekali supaya tablet langsung memakai versi terbaru. */
   if (!window.BERKAS_TUNGGAL && 'serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    let pendaftaran = null;
     window.addEventListener('load', () => {
       navigator.serviceWorker
         .register('sw.js', { updateViaCache: 'none' })
-        .then((reg) => reg.update().catch(() => {}))
+        .then((reg) => {
+          pendaftaran = reg;
+          return reg.update().catch(() => {});
+        })
         .catch((e) => console.warn('Service worker gagal:', e));
+    });
+
+    /* Periksa pembaruan lagi tiap kali aplikasi kembali ke depan layar.
+
+       Sebelumnya pemeriksaan hanya terjadi pada peristiwa 'load'. Aplikasi
+       yang sudah dipasang di layar utama HP jarang benar-benar dimuat ulang:
+       menekan ikonnya biasanya cuma memanggil kembali proses yang masih
+       hidup di latar, jadi 'load' tidak pernah terjadi lagi dan HP bisa
+       bertahan di versi lama berhari-hari padahal situsnya sudah diperbarui.
+       Di komputer hal ini tidak terlihat karena tabnya memang dibuka ulang.
+
+       Dijeda setengah jam supaya membuka-tutup aplikasi sepanjang hari tidak
+       berubah jadi rentetan permintaan. Sekali periksa hanya menanyakan satu
+       berkas kecil, dan kalau tidak berubah server menjawab "belum berubah". */
+    let periksaTerakhir = Date.now();
+    const JEDA_PERIKSA = 30 * 60 * 1000;
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden || !pendaftaran) return;
+      if (Date.now() - periksaTerakhir < JEDA_PERIKSA) return;
+      periksaTerakhir = Date.now();
+      pendaftaran.update().catch(() => {});
     });
     // Pemasangan pertama kali tidak perlu dimuat ulang: yang tampil sudah baru.
     const adaPekerjaLama = !!navigator.serviceWorker.controller;
     let sudahMuatUlang = false;
+
+    /* Memuat ulang di tengah pelayanan berarti keranjang yang sudah diisi
+       kasir hilang begitu saja, di depan pelanggan. Versi barunya toh sudah
+       aktif — berkasnya terpakai sendiri saat aplikasi dibuka berikutnya. */
+    const sedangMelayani = () =>
+      !!document.querySelector('.cart-item') || !!document.querySelector('#modalSukses[open]');
+
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!adaPekerjaLama || sudahMuatUlang) return;
       sudahMuatUlang = true;
+      if (sedangMelayani()) return U.toast('Versi baru siap, dipakai saat aplikasi dibuka lagi');
       location.reload();
     });
   }

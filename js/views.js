@@ -2152,10 +2152,27 @@ window.Views = (function () {
           <p class="muted">Android/Chrome: menu ⋮ → <b>Tambahkan ke layar utama</b>.<br>
           iPad/Safari: tombol Bagikan → <b>Add to Home Screen</b>.<br>
           Setelah dipasang, aplikasi bisa dibuka tanpa internet.</p>
+          <hr style="border:0;border-top:1px solid var(--border);margin:16px 0">
+          <h3>Versi Aplikasi</h3>
+          <p class="muted">Perangkat ini sedang menjalankan versi <b id="versiApp">${esc(U.versiApp())}</b>.
+          Bandingkan angka ini antara tablet dan HP: kalau berbeda, yang angkanya lebih kecil masih
+          menyajikan berkas lama dari simpanannya sendiri.</p>
+          <button class="btn btn-block" id="btnPerbarui" type="button">🔄 Ambil Versi Terbaru</button>
+          <small class="muted">Membuang salinan berkas aplikasi lalu memuat ulang dari internet.
+          Data pesanan, pelanggan, dan pengaturan <b>tidak</b> ikut terhapus.</small>
         </div>
       </div>`;
 
     gambarKartuServer(el);
+
+    el.querySelector('#btnPerbarui').addEventListener('click', async () => {
+      const ya = await U.konfirmasi(
+        'Ambil versi terbaru?',
+        'Aplikasi akan memuat ulang dari internet. Data pesanan dan pelanggan tidak terhapus. Pastikan ada sinyal.',
+        'Ya, muat ulang'
+      );
+      if (ya) U.perbaruiAplikasi();
+    });
 
     el.querySelector('#btnSimpanToko').addEventListener('click', () => {
       DB.simpanToko({

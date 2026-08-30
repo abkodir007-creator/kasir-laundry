@@ -364,6 +364,8 @@ tbody tr:last-child td { border-bottom: 0; }
 }
 
 
+.masuk-versi { text-align: center; margin: 14px 0 0; font-size: 12px; color: var(--muted); }
+
 /* ---- Panel "pesanan berhasil" ----
    Tampil sesudah nota tersimpan. Tombolnya sengaja setinggi 52px dan
    melebar penuh: di HP panel ini yang dipakai kasir sambil berdiri, dan

@@ -51,7 +51,7 @@ window.DB = (function () {
       logo: '',                 // data URI, diisi lewat menu Pengaturan
       catatanStruk: 'Bersih - Wangi - Cepat - Terpercaya. Terima kasih! Barang yang tidak diambil dalam 30 hari di luar tanggung jawab kami.',
       lebarStruk: '58',         // '58' atau '80', mengikuti lebar kertas printer
-      cetakSaatSimpan: 'pelanggan',  // 'pelanggan' | 'toko' | 'dua'
+      cetakSaatSimpan: 'tanya',      // 'tanya' | 'pelanggan' | 'toko' | 'dua'
     },
     kategori: KATEGORI_AWAL,
     layanan: LAYANAN_AWAL,
@@ -127,6 +127,22 @@ window.DB = (function () {
     if (state.layanan && state.layanan.length) return;
     state.layanan = structuredClone(LAYANAN_AWAL);
     layananDipulihkan = true;
+    simpan();
+  }
+
+  /* Dulu pesanan yang tersimpan langsung melempar dialog cetak, tanpa pesan
+     apa pun bahwa nota sudah jadi. Di layar HP dialog itu butuh waktu muncul,
+     jadi kasir mengira tombolnya tidak bekerja dan menekannya berulang —
+     hasilnya pesanan kembar di daftar. Sekarang yang muncul lebih dulu adalah
+     panel "berhasil" berisi tombol cetak dan kirim WA.
+
+     Pemasangan lama tetap membawa pilihan 'pelanggan' dari bawaan versi
+     sebelumnya, dan itu bukan pilihan yang pemilik tentukan sendiri. Sekali
+     saja dipindahkan ke 'tanya'; sesudah itu apa pun yang dipilih pemilik
+     dihormati, karena penanda alurSukses sudah terpasang. */
+  function pastikanAlurSukses() {
+    if (state.toko && state.toko.alurSukses) return;
+    state.toko = { ...(state.toko || {}), cetakSaatSimpan: 'tanya', alurSukses: 1 };
     simpan();
   }
 
@@ -246,6 +262,7 @@ window.DB = (function () {
   pastikanAdaOwner();
   pastikanAdaKategori();
   pastikanAdaLayanan();
+  pastikanAlurSukses();
 
   // Pemasangan lama menyimpan nomor di dalam state; pindahkan sekali ke lokal.
   if (localStorage.getItem(K_NOMOR) === null) {
@@ -497,6 +514,25 @@ window.DB = (function () {
     state.pesanan.unshift(p);
     simpan();
     catat('pesanan', p);
+    return p;
+  }
+
+  /* Nomor WhatsApp sering baru diketahui sesudah nota tersimpan — panel
+     "berhasil" di kasir memungkinkan mengisinya di tempat, tanpa harus
+     membatalkan nota. Nomornya ikut disimpan ke buku pelanggan supaya nota
+     berikutnya sudah terisi sendiri. */
+  function aturHpPesanan(id, hp) {
+    const p = cariPesanan(id);
+    if (!p) return null;
+    p.pelanggan = { ...p.pelanggan, hp: (hp || '').trim() };
+    simpan();
+    catat('pesanan', p);
+
+    if (p.pelanggan.hp) {
+      const kunci = kunciPelanggan(p.pelanggan.nama, '');
+      const lama = state.pelanggan.find((c) => kunciPelanggan(c.nama, '') === kunci);
+      if (!lama || !lama.hp) simpanPelanggan({ ...(lama || {}), nama: p.pelanggan.nama, hp: p.pelanggan.hp });
+    }
     return p;
   }
 
@@ -760,7 +796,7 @@ window.DB = (function () {
     hargaLayanan, punyaTabelHarga, rentangHarga,
     kategori, kategoriAktif, cariKategori, simpanKategori, hapusKategori, jamLayanan,
     pengguna, cariPengguna, simpanPengguna, hapusPengguna,
-    pesanan, cariPesanan, buatPesanan, ubahStatus, lunasi, hapusPesanan,
+    pesanan, cariPesanan, buatPesanan, ubahStatus, lunasi, hapusPesanan, aturHpPesanan,
     pelanggan, bukuPelanggan, simpanPelanggan, hapusPelanggan, imporPelanggan, toko, simpanToko, ekspor, impor, resetSemua,
     infoCadanganOtomatis, pulihkanCadanganOtomatis,
   };

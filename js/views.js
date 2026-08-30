@@ -215,6 +215,7 @@ window.Views = (function () {
 
   /* ================= KASIR ================= */
   const pos = { keranjang: [], cari: '', estimasi: null };
+  let sedangSimpan = false;
 
   function kasir(el) {
     el.innerHTML = `
@@ -297,7 +298,7 @@ window.Views = (function () {
               <label for="inpCatatan">Catatan</label>
               <input class="input" id="inpCatatan" placeholder="Contoh: pisahkan pakaian putih">
             </div>
-            <button class="btn btn-primary btn-block" id="btnSimpan" type="button" disabled>Simpan &amp; Cetak Struk</button>
+            <button class="btn btn-primary btn-block" id="btnSimpan" type="button" disabled>Simpan Pesanan</button>
           </div>
         </div>
       </div>`;
@@ -580,7 +581,13 @@ window.Views = (function () {
       gambarKeranjang();
     });
 
-    el.querySelector('#btnSimpan').addEventListener('click', () => {
+    el.querySelector('#btnSimpan').addEventListener('click', (ev) => {
+      const tombol = ev.currentTarget;
+      /* Kunci ganda supaya satu pesanan tidak tersimpan dua kali. Di HP dialog
+         cetak butuh sekejap untuk muncul, dan selama itu kasir mengira
+         tombolnya tidak bekerja lalu menekannya lagi — dulu itulah yang
+         membuat nota kembar menumpuk di daftar pesanan. */
+      if (tombol.disabled || sedangSimpan) return;
       const inpNama = el.querySelector('#inpNama');
       const namaPelanggan = inpNama.value.trim();
       if (!namaPelanggan) {
@@ -615,17 +622,151 @@ window.Views = (function () {
         metode: el.querySelector('#segMetode .is-active').dataset.metode,
         catatan: el.querySelector('#inpCatatan').value,
       });
+      sedangSimpan = true;
+      tombol.disabled = true;
       pos.keranjang = [];
       pos.estimasi = null;
       kasir(el); // reset form
-      U.toast(`Pesanan ${p.kode} tersimpan`);
-      const mode = DB.toko().cetakSaatSimpan;
-      if (mode === 'dua') Receipt.cetakDua(p);
-      else Receipt.cetak(p, mode === 'toko' ? 'toko' : 'pelanggan');
+      try {
+        panelSukses(p);
+      } catch (err) {
+        /* Kalau panelnya gagal tampil, kuncinya harus tetap dibuka —
+           kasir tidak boleh terjebak tidak bisa menyimpan apa pun. */
+        sedangSimpan = false;
+        U.toast(`Pesanan ${p.kode} tersimpan`);
+        throw err;
+      }
     });
 
     gambarLayanan();
     gambarKeranjang();
+  }
+
+  /* ---------- Panel "pesanan berhasil" ----------
+
+     Muncul begitu nota tersimpan, dan sengaja menutup layar penuh. Dua
+     alasannya:
+
+     1. Kasir butuh bukti bahwa pesanannya masuk. Sebelumnya yang ada cuma
+        pesan sekilas di pojok, sementara dialog cetak baru muncul beberapa
+        saat kemudian — di HP jeda itu terbaca sebagai "tombolnya rusak",
+        lalu ditekan berkali-kali sampai notanya kembar.
+     2. Selama panel ini terbuka, tombol Simpan tidak bisa disentuh sama
+        sekali. Jadi pengulangan itu mustahil, bukan sekadar tidak mungkin
+        secara logika.
+
+     Cetak dan kirim WA dikerjakan dari sini juga, supaya kasir tidak perlu
+     berpindah ke halaman Pesanan hanya untuk mencetak nota yang baru saja
+     dibuatnya.
+
+     Dialognya milik sendiri, terpisah dari #modal yang dipakai halaman lain,
+     dengan alasan yang sama seperti U.konfirmasi: peristiwa "close" dari
+     dialog bersama pernah tertangkap oleh penunggu berikutnya. */
+  function dialogSukses() {
+    let modal = document.getElementById('modalSukses');
+    if (!modal) {
+      modal = document.createElement('dialog');
+      modal.id = 'modalSukses';
+      modal.className = 'modal';
+      modal.innerHTML = '<form method="dialog" class="modal-inner" id="suksesInner"></form>';
+      document.body.appendChild(modal);
+    }
+    return modal;
+  }
+
+  function panelSukses(p) {
+    const modal = dialogSukses();
+    const inner = modal.querySelector('.modal-inner');
+    const sisa = Math.max(0, p.total - p.dibayar);
+
+    inner.innerHTML = `
+      <div class="sukses-kepala">
+        <div class="sukses-ikon">✓</div>
+        <h3>Pesanan berhasil dibuat</h3>
+        <div class="sukses-kode">${esc(p.kode)}</div>
+      </div>
+      <div class="sukses-rincian">
+        <div><span>Pelanggan</span><b>${esc(p.pelanggan.nama)}</b></div>
+        <div><span>Total</span><b>${U.rupiah(p.total)}</b></div>
+        ${sisa ? `<div class="sukses-sisa"><span>Sisa bayar</span><b>${U.rupiah(sisa)}</b></div>` : '<div><span>Pembayaran</span><b>Lunas</b></div>'}
+        <div><span>Estimasi selesai</span><b>${U.estimasi(p.estimasiSelesai)}${p.estimasiNama ? ` (${esc(p.estimasiNama)})` : ''}</b></div>
+      </div>
+      <div class="sukses-aksi">
+        <button type="button" class="btn btn-primary btn-block" data-aksi="cetak">🖨️ Cetak Struk Pelanggan</button>
+        <button type="button" class="btn btn-block" data-aksi="label">🏷️ Cetak Label Toko</button>
+        <button type="button" class="btn btn-block" data-aksi="wa">💬 Kirim Nota lewat WhatsApp</button>
+      </div>
+      <div class="sukses-hp" hidden>
+        <label for="suksesHp">Nomor WhatsApp pelanggan</label>
+        <div class="sukses-hp-baris">
+          <input class="input" id="suksesHp" type="tel" inputmode="tel" placeholder="0812xxxxxxxx" value="${esc(p.pelanggan.hp || '')}">
+          <button type="button" class="btn btn-primary" data-aksi="kirimHp">Kirim</button>
+        </div>
+      </div>
+      <p class="sukses-kabar muted" role="status" aria-live="polite"></p>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-block" value="tutup">Selesai — Pesanan Baru</button>
+      </div>`;
+
+    const kabar = inner.querySelector('.sukses-kabar');
+    const bagianHp = inner.querySelector('.sukses-hp');
+    const lapor = (pesan) => { kabar.textContent = pesan; };
+    const tandai = (b) => { b.classList.add('is-selesai'); };
+
+    inner.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-aksi]');
+      if (!b) return;
+      const aksi = b.dataset.aksi;
+
+      if (aksi === 'cetak') {
+        Receipt.cetak(p, 'pelanggan');
+        tandai(b);
+        return lapor('Struk pelanggan dikirim ke printer.');
+      }
+      if (aksi === 'label') {
+        Receipt.cetak(p, 'toko');
+        tandai(b);
+        return lapor('Label toko dikirim ke printer.');
+      }
+      if (aksi === 'wa') {
+        if (p.pelanggan.hp) {
+          Receipt.kirimWA(p);
+          tandai(b);
+          return lapor('WhatsApp dibuka dengan nota yang sudah tertulis.');
+        }
+        bagianHp.hidden = false;
+        inner.querySelector('#suksesHp').focus();
+        return lapor('Nomornya belum ada. Isi dulu, nomornya ikut tersimpan ke buku pelanggan.');
+      }
+      if (aksi === 'kirimHp') {
+        const nomor = inner.querySelector('#suksesHp').value.trim();
+        if (!U.waNomor(nomor)) return lapor('Nomor itu belum bisa dibaca. Contoh: 081234567890.');
+        const baru = DB.aturHpPesanan(p.id, nomor) || p;
+        p.pelanggan = baru.pelanggan;
+        bagianHp.hidden = true;
+        Receipt.kirimWA(p);
+        tandai(inner.querySelector('[data-aksi="wa"]'));
+        lapor('Nomor tersimpan, WhatsApp dibuka dengan nota yang sudah tertulis.');
+      }
+    });
+
+    /* Kunci simpan dibuka lagi begitu panelnya ditutup, bukan setelah sekian
+       detik: selama panel terbuka tidak ada yang bisa menekan Simpan, dan
+       begitu ditutup kasir memang sudah boleh membuat nota berikutnya. */
+    modal.addEventListener('close', () => { sedangSimpan = false; }, { once: true });
+    modal.showModal();
+
+    /* Pemilik yang memang ingin langsung mencetak tanpa memilih tetap
+       dilayani — panelnya sudah tampil lebih dulu, jadi kasir tetap melihat
+       bahwa notanya masuk, dan masih bisa mencetak ulang dari sini. */
+    const mode = DB.toko().cetakSaatSimpan;
+    if (mode === 'dua') {
+      Receipt.cetakDua(p);
+      lapor('Struk pelanggan dan label toko dikirim ke printer.');
+    } else if (mode === 'pelanggan' || mode === 'toko') {
+      Receipt.cetak(p, mode);
+      lapor(mode === 'toko' ? 'Label toko dikirim ke printer.' : 'Struk pelanggan dikirim ke printer.');
+    }
   }
 
   /* ================= PESANAN ================= */
@@ -1954,13 +2095,14 @@ window.Views = (function () {
             Ukurannya tertulis di kertas atau kotak printer.</small>
           </div>
           <div class="field">
-            <label for="tCetak">Yang dicetak saat pesanan disimpan</label>
+            <label for="tCetak">Setelah pesanan disimpan</label>
             <select class="input" id="tCetak">
-              <option value="pelanggan"${t.cetakSaatSimpan === 'toko' || t.cetakSaatSimpan === 'dua' ? '' : ' selected'}>Struk pelanggan saja</option>
-              <option value="toko"${t.cetakSaatSimpan === 'toko' ? ' selected' : ''}>Label toko saja</option>
-              <option value="dua"${t.cetakSaatSimpan === 'dua' ? ' selected' : ''}>Keduanya (2 lembar)</option>
+              <option value="tanya"${t.cetakSaatSimpan === 'pelanggan' || t.cetakSaatSimpan === 'toko' || t.cetakSaatSimpan === 'dua' ? '' : ' selected'}>Tampilkan pilihan cetak (disarankan)</option>
+              <option value="pelanggan"${t.cetakSaatSimpan === 'pelanggan' ? ' selected' : ''}>Langsung cetak struk pelanggan</option>
+              <option value="toko"${t.cetakSaatSimpan === 'toko' ? ' selected' : ''}>Langsung cetak label toko</option>
+              <option value="dua"${t.cetakSaatSimpan === 'dua' ? ' selected' : ''}>Langsung cetak keduanya (2 lembar)</option>
             </select>
-            <small class="muted">Label toko menonjolkan nama pelanggan dan waktu selesai, untuk ditempel di keranjang cucian.</small>
+            <small class="muted">Panel "pesanan berhasil" selalu muncul lebih dulu — di situ ada tombol cetak struk, cetak label, dan kirim WhatsApp. Pilihan "langsung cetak" hanya menambah cetakan otomatis di atasnya. Label toko menonjolkan nama pelanggan dan waktu selesai, untuk ditempel di keranjang cucian.</small>
           </div>
           <div class="field">
             <button class="btn btn-block" id="btnTesCetak" type="button">🖨️ Tes cetak struk contoh</button>

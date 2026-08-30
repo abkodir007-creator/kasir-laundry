@@ -363,6 +363,34 @@ tbody tr:last-child td { border-bottom: 0; }
   .beranda-bawah { grid-template-columns: 1fr; }
 }
 
+
+/* ---- Panel "pesanan berhasil" ----
+   Tampil sesudah nota tersimpan. Tombolnya sengaja setinggi 52px dan
+   melebar penuh: di HP panel ini yang dipakai kasir sambil berdiri, dan
+   tombol kecil berdempetan adalah cara tercepat salah tekan. */
+.sukses-kepala { text-align: center; margin-bottom: 14px; }
+.sukses-ikon {
+  width: 56px; height: 56px; margin: 0 auto 10px; border-radius: 50%;
+  background: var(--ok-soft); color: var(--ok);
+  font-size: 30px; line-height: 56px; font-weight: 700;
+}
+.sukses-kepala h3 { margin: 0 0 4px; font-size: 19px; color: var(--ok); }
+.sukses-kode { font-size: 15px; font-weight: 700; letter-spacing: .5px; color: var(--text); }
+.sukses-rincian { background: var(--surface-2); border-radius: var(--radius); padding: 12px 14px; }
+.sukses-rincian > div { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 14px; }
+.sukses-rincian span { color: var(--muted); }
+.sukses-rincian b { text-align: right; }
+.sukses-sisa b { color: var(--danger); }
+.sukses-aksi { display: grid; gap: 8px; margin-top: 14px; }
+.sukses-aksi .btn { min-height: 52px; font-size: 15px; }
+.sukses-aksi .btn.is-selesai { border-color: var(--ok); color: var(--ok); }
+.sukses-aksi .btn.is-selesai::after { content: " ✓"; }
+.sukses-hp { margin-top: 12px; }
+.sukses-hp label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.sukses-hp-baris { display: flex; gap: 8px; }
+.sukses-hp-baris .input { flex: 1; min-width: 0; }
+.sukses-kabar { margin: 10px 0 0; min-height: 18px; font-size: 13px; }
+
 @media (max-width: 720px) {
   .app { flex-direction: column-reverse; }
   .nav { width: auto; flex: 0 0 auto; flex-direction: row; padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); }
@@ -378,6 +406,10 @@ tbody tr:last-child td { border-bottom: 0; }
   .nav-item { flex: 0 0 auto; min-width: 60px; flex-direction: column; gap: 2px; padding: 6px 2px; font-size: 10px; min-height: 56px; justify-content: center; text-align: center; overflow: hidden; white-space: nowrap; }
   .nav-item span { font-size: 20px; }
   .main { padding: 14px; }
+  /* Panelnya nyaris selebar layar supaya tombolnya tetap besar. */
+  #modalSukses { width: 96vw; }
+  #modalSukses .modal-inner { padding: 16px; }
+  .sukses-aksi .btn { min-height: 54px; }
 }
 
 @media print { .app, .toast { display: none !important; } }

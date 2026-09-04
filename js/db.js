@@ -65,7 +65,27 @@ window.DB = (function () {
   /* Saat akun toko aktif, tiap perubahan ikut dikirim ke Firestore.
      Saat tidak, aplikasi berjalan persis seperti versi lokal sebelumnya. */
   let awanAktif = false;
-  const catat = (koleksi, doc) => { if (awanAktif) Awan.tulis(koleksi, doc); };
+  /* Penanda "catatan ini sudah pernah sampai ke server".
+
+     Dipasang di dua tempat saja: saat catatan dikirim ke server, dan saat
+     catatan itu justru datang dari server. Gunanya cuma satu, tapi penting —
+     membedakan dua hal yang dari luar tampak sama:
+
+       catatan hilang dari daftar server karena memang DIHAPUS pemilik
+       catatan hilang dari daftar server karena BELUM PERNAH sampai ke sana
+
+     Yang pertama harus ikut terhapus di perangkat lain. Yang kedua tidak
+     boleh disentuh sama sekali. Lihat terapkanDariAwan. */
+  const TANDA = 'awanOk';
+
+  const catat = (koleksi, doc) => {
+    if (!awanAktif) return;
+    if (doc && !doc[TANDA]) {
+      doc[TANDA] = true;
+      simpan();
+    }
+    Awan.tulis(koleksi, doc);
+  };
   const buang = (koleksi, id) => { if (awanAktif) Awan.hapus(koleksi, id); };
 
   /* Nomor nota sengaja disimpan per tablet, bukan di server.
@@ -765,8 +785,29 @@ window.DB = (function () {
     const penghapusanSah = serverSiap && meta && meta.dariServer;
     if (kosong(isi) && lokalBerisi && !penghapusanSah) return;
 
-    if (nama === 'toko') state.toko = { ...AWAL.toko, ...isi };
-    else state[nama] = isi;
+    if (nama === 'toko') {
+      state.toko = { ...AWAL.toko, ...isi };
+    } else {
+      /* Daftar dari server MENAMBAH, bukan mengganti begitu saja.
+
+         Dulu baris ini cuma `state[nama] = isi`, dan itu menghapus nota
+         sungguhan. Kejadiannya: perangkat dipakai melayani saat belum masuk
+         akun toko, jadi enam notanya hanya tersimpan di perangkat. Begitu
+         akun toko dimasukkan, server mengirim daftarnya sendiri yang cuma
+         berisi satu nota — daftar itu tidak kosong, jadi penjagaan di atas
+         tidak berlaku — dan lima nota lainnya lenyap tanpa pesan apa pun.
+
+         Sekarang catatan lokal yang BELUM PERNAH sampai ke server selalu
+         dipertahankan. Catatan yang sudah pernah terkirim lalu hilang dari
+         daftar server tetap ikut terhapus, karena itu memang penghapusan
+         yang disengaja pemilik dari perangkat lain. */
+      const dariServer = isi.map((d) => ({ ...d, [TANDA]: true }));
+      const idServer = new Set(dariServer.map((d) => String(d.id)));
+      const belumTerkirim = (state[nama] || []).filter(
+        (d) => !idServer.has(String(d.id)) && !d[TANDA]
+      );
+      state[nama] = [...dariServer, ...belumTerkirim];
+    }
 
     if (nama === 'pesanan') state.pesanan.sort((a, b) => (a.dibuat < b.dibuat ? 1 : -1));
     if (nama === 'pengeluaran') {
@@ -781,6 +822,27 @@ window.DB = (function () {
     } finally {
       sedangDariAwan = false;
     }
+  }
+
+  /* Susulkan catatan yang belum pernah sampai ke server.
+
+     Tanpa ini, nota yang dibuat saat perangkat belum masuk akun toko akan
+     bertahan di satu perangkat saja selamanya: aman dari terhapus, tapi tidak
+     pernah terlihat di perangkat lain dan tidak ikut tersalin ke server.
+     Hanya menulis, tidak pernah menghapus apa pun di server. */
+  function kirimYangTertinggal() {
+    if (!awanAktif) return 0;
+    let jumlah = 0;
+    for (const nama of ['kategori', 'layanan', 'pengguna', 'pesanan', 'pengeluaran', 'pelanggan']) {
+      for (const d of state[nama] || []) {
+        if (d[TANDA]) continue;
+        d[TANDA] = true;
+        Awan.tulis(nama, d);
+        jumlah += 1;
+      }
+    }
+    if (jumlah) simpan();
+    return jumlah;
   }
 
   /* Pemulihan manual: gabungkan isi server ke perangkat ini.
@@ -812,7 +874,7 @@ window.DB = (function () {
 
   return {
     STATUS, LABEL_STATUS, KATEGORI,
-    pakaiAwan, terapkanDariAwan, gabungDariAwan, seluruhState, kodePerangkat,
+    pakaiAwan, terapkanDariAwan, gabungDariAwan, kirimYangTertinggal, seluruhState, kodePerangkat,
     pakaiAwanAktif: () => awanAktif,
     tandaiServerSiap, serverSudahSiap: () => serverSiap,
     layananDipulihkan: () => layananDipulihkan,

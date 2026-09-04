@@ -2363,9 +2363,17 @@ window.Views = (function () {
       if (!ya) return;
       try {
         DB.pulihkanCadanganOtomatis();
+        /* Isi cadangan belum tentu pernah sampai ke server — justru itu
+           sebabnya masih ada di sini. Langsung disusulkan, supaya pemilik
+           tidak perlu tahu bahwa aplikasi harus dibuka ulang dulu. */
+        const tertinggal = DB.kirimYangTertinggal();
         pengaturan(el);
         window.SegarkanMerek();
-        U.toast('Cadangan otomatis dipulihkan');
+        U.toast(
+          tertinggal
+            ? `Cadangan dipulihkan, ${tertinggal} catatan dikirim ke server`
+            : 'Cadangan otomatis dipulihkan'
+        );
       } catch (err) {
         U.toast('Gagal memulihkan: ' + err.message);
       }

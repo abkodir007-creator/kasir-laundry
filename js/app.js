@@ -255,7 +255,15 @@
       Awan.serverBerisi()
         .then((berisi) => {
           DB.tandaiServerSiap(berisi);
-          if (!berisi) U.toast('Server masih kosong — buka Pengaturan lalu tekan "Pindahkan data ke server"');
+          if (!berisi) {
+            U.toast('Server masih kosong — buka Pengaturan lalu tekan "Pindahkan data ke server"');
+          } else {
+            /* Nota yang dibuat selagi perangkat belum masuk akun toko belum
+               pernah sampai ke server. Disusulkan sekali di sini, supaya
+               tidak bertahan di satu perangkat saja tanpa ada yang tahu. */
+            const tertinggal = DB.kirimYangTertinggal();
+            if (tertinggal) U.toast(`${tertinggal} catatan tertinggal dikirim ke server`);
+          }
           segarkanIsi();
         })
         .catch(() => DB.tandaiServerSiap(false));

@@ -2220,6 +2220,10 @@ window.Views = (function () {
           <div id="periksaData"></div>
           <button class="btn btn-block" id="btnPeriksaServer" type="button">🔍 Hitung Catatan di Server</button>
           <small class="muted">Hanya membaca. Tidak mengubah apa pun, di perangkat maupun di server.</small>
+          <div class="mt"></div>
+          <button class="btn btn-block" id="btnTarikServer" type="button">⬇️ Ambil Ulang Data dari Server</button>
+          <small class="muted">Menyalin isi server ke perangkat ini. Hanya menambah — catatan yang cuma ada
+          di perangkat ini tidak ikut terhapus, dan isi server tidak diubah sama sekali.</small>
           <hr style="border:0;border-top:1px solid var(--border);margin:16px 0">
           <h3>Versi Aplikasi</h3>
           <p class="muted">Perangkat ini sedang menjalankan versi <b id="versiApp">${esc(U.versiApp())}</b>.
@@ -2247,6 +2251,22 @@ window.Views = (function () {
       }
       tombol.disabled = false;
       tombol.textContent = '🔍 Hitung Catatan di Server';
+    });
+
+    el.querySelector('#btnTarikServer').addEventListener('click', async (e) => {
+      const tombol = e.currentTarget;
+      tombol.disabled = true;
+      tombol.textContent = 'Mengambil…';
+      try {
+        const isi = await Awan.ambilSemua();
+        const masuk = DB.gabungDariAwan(isi);
+        pengaturan(el);
+        U.toast(masuk ? `${masuk} catatan diambil dari server` : 'Tidak ada catatan baru di server');
+      } catch (err) {
+        U.toast('Tidak bisa membaca server: ' + (err?.message || err?.code || 'gagal'));
+        tombol.disabled = false;
+        tombol.textContent = '⬇️ Ambil Ulang Data dari Server';
+      }
     });
 
     el.querySelector('#btnPerbarui').addEventListener('click', async () => {

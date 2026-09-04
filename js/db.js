@@ -783,11 +783,36 @@ window.DB = (function () {
     }
   }
 
+  /* Pemulihan manual: gabungkan isi server ke perangkat ini.
+
+     Berbeda dari terapkanDariAwan yang MENGGANTI daftar, yang ini hanya
+     MENAMBAH — catatan yang cuma ada di perangkat ini tidak pernah ikut
+     terhapus. Dipakai saat satu perangkat kehilangan isinya sementara
+     server masih menyimpannya, dan arahnya sengaja cuma satu supaya tidak
+     bisa berubah jadi jalan penghapusan seperti tombol unggah dulu. */
+  function gabungDariAwan(isiServer) {
+    let masuk = 0;
+    for (const nama of ['kategori', 'layanan', 'pengguna', 'pesanan', 'pengeluaran', 'pelanggan']) {
+      const dariServer = isiServer[nama];
+      if (!Array.isArray(dariServer) || !dariServer.length) continue;
+      const peta = new Map((state[nama] || []).map((d) => [String(d.id), d]));
+      for (const d of dariServer) {
+        if (!peta.has(String(d.id))) masuk += 1;
+        peta.set(String(d.id), d);
+      }
+      state[nama] = [...peta.values()];
+    }
+    state.pesanan.sort((a, b) => (a.dibuat < b.dibuat ? 1 : -1));
+    state.pengeluaran.sort((a, b) => (a.tanggal < b.tanggal ? 1 : a.tanggal > b.tanggal ? -1 : 0));
+    simpan();
+    return masuk;
+  }
+
   const seluruhState = () => state;
 
   return {
     STATUS, LABEL_STATUS, KATEGORI,
-    pakaiAwan, terapkanDariAwan, seluruhState, kodePerangkat,
+    pakaiAwan, terapkanDariAwan, gabungDariAwan, seluruhState, kodePerangkat,
     pakaiAwanAktif: () => awanAktif,
     tandaiServerSiap, serverSudahSiap: () => serverSiap,
     layananDipulihkan: () => layananDipulihkan,

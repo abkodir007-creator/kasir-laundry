@@ -277,6 +277,18 @@ window.Awan = (function () {
     return hasil;
   }
 
+  /** Baca seluruh isi server sekali, langsung dari server. Untuk pemulihan
+      manual saat satu perangkat kehilangan isinya. */
+  async function ambilSemua() {
+    if (!aktif()) throw new Error('Belum tersambung ke akun toko');
+    const hasil = {};
+    for (const nama of KOLEKSI) {
+      const snap = await induk().collection(nama).get({ source: 'server' });
+      hasil[nama] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    }
+    return hasil;
+  }
+
   const aktif = () => !!(dbAwan && akun());
   const sudahSiap = () => siap;
   const jumlahTertunda = () => tertunda;
@@ -284,7 +296,7 @@ window.Awan = (function () {
   return {
     KONFIG, TOKO, KOLEKSI,
     tersedia, mulai, akun, pantauAkun, masukToko, keluarToko, periksaSandiToko,
-    sinkronkan, hentikan, tulis, hapus, tulisToko, unggahSemua, serverBerisi, hitungServer,
+    sinkronkan, hentikan, tulis, hapus, tulisToko, unggahSemua, serverBerisi, hitungServer, ambilSemua,
     aktif, sudahSiap, jumlahTertunda,
   };
 })();

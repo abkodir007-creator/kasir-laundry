@@ -37,7 +37,16 @@ window.Awan = (function () {
   let onStatus = () => {};
   let tertunda = 0;
   let tertundaPer = {};   // per koleksi, lihat catatan di hitungTertunda
-  let galat = null;       // pesan kegagalan terakhir dari server, mis. akses ditolak
+  let galat = null;       // kegagalan MEMBACA terakhir, mis. akses ditolak
+  /* Kegagalan MENULIS disimpan terpisah dari kegagalan membaca.
+
+     Kalau digabung, kabar snapshot berikutnya langsung menghapusnya —
+     tiap snapshot menyetel galat = null — sehingga penolakan tulisan cuma
+     terlihat sepersekian detik lalu status kembali hijau "Tersinkron".
+     Terbukti di pengujian: server menolak semua tulisan, statusnya tetap
+     hijau. Yang ini hanya bersih kalau ada tulisan yang benar-benar
+     berhasil. */
+  let galatTulis = null;
 
   const tersedia = () => typeof firebase !== 'undefined' && !!firebase.initializeApp;
 
@@ -186,7 +195,7 @@ window.Awan = (function () {
     kabarkanStatus();
   }
 
-  const kabarkanStatus = () => onStatus({ tertunda, online: navigator.onLine, galat });
+  const kabarkanStatus = () => onStatus({ tertunda, online: navigator.onLine, galat: galat || galatTulis });
 
   function hentikan() {
     pendengar.forEach((lepas) => {
@@ -204,28 +213,59 @@ window.Awan = (function () {
   // Sengaja tidak di-await: Firestore sudah menyimpan ke antrean lokal lebih
   // dulu, jadi menunggu jaringan hanya akan membuat kasir menatap layar.
 
+  /* Kegagalan menulis dulu hanya dicetak ke konsol.
+
+     Itu berbahaya, bukan sekadar kurang rapi: kalau server menolak tulisan,
+     Firestore MEMBATALKAN kembali perubahan lokalnya, lalu mengirim kabar
+     daftar tanpa catatan itu — dan bagi aplikasi hasilnya persis sama
+     dengan "catatan ini memang sudah dihapus". Nota yang sebenarnya gagal
+     terkirim jadi ikut lenyap, tanpa satu pun tanda di layar. Sekarang
+     kegagalannya ikut mewarnai status sambungan. */
+  function catatGagal(apa, e) {
+    console.error(apa, e);
+    galatTulis = e?.code || 'gagal';
+    kabarkanStatus();
+  }
+
+  function catatBerhasil() {
+    if (!galatTulis) return;
+    galatTulis = null;
+    kabarkanStatus();
+  }
+
+  /** Mengembalikan janji yang baru selesai kalau server SUDAH menerimanya.
+      Saat offline janji itu menggantung sampai sambungan kembali — memang
+      begitu maunya, lihat penanda awanOk di js/db.js. */
   function tulis(koleksi, doc) {
-    if (!aktif()) return;
+    if (!aktif()) return null;
     const { id, ...isi } = doc;
-    induk()
+    return induk()
       .collection(koleksi)
       .doc(String(id))
       .set(isi, { merge: false })
-      .catch((e) => console.error('Gagal menulis', koleksi, id, e));
+      .then(catatBerhasil)
+      .catch((e) => {
+        catatGagal('Gagal menulis ' + koleksi + '/' + id, e);
+        throw e;
+      });
   }
 
   function hapus(koleksi, id) {
-    if (!aktif()) return;
-    induk()
+    if (!aktif()) return null;
+    return induk()
       .collection(koleksi)
       .doc(String(id))
       .delete()
-      .catch((e) => console.error('Gagal menghapus', koleksi, id, e));
+      .then(catatBerhasil)
+      .catch((e) => {
+        catatGagal('Gagal menghapus ' + koleksi + '/' + id, e);
+        throw e;
+      });
   }
 
   function tulisToko(toko) {
     if (!aktif()) return;
-    induk().set({ toko }, { merge: true }).catch((e) => console.error('Gagal menulis data toko', e));
+    induk().set({ toko }, { merge: true }).catch((e) => catatGagal('Gagal menulis data toko', e));
   }
 
   /** Kirim seluruh isi state sekaligus. Dipakai saat memindahkan data lama. */
@@ -296,6 +336,7 @@ window.Awan = (function () {
   return {
     KONFIG, TOKO, KOLEKSI,
     tersedia, mulai, akun, pantauAkun, masukToko, keluarToko, periksaSandiToko,
+    galatTulis: () => galatTulis,
     sinkronkan, hentikan, tulis, hapus, tulisToko, unggahSemua, serverBerisi, hitungServer, ambilSemua,
     aktif, sudahSiap, jumlahTertunda,
   };

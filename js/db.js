@@ -78,15 +78,33 @@ window.DB = (function () {
      boleh disentuh sama sekali. Lihat terapkanDariAwan. */
   const TANDA = 'awanOk';
 
+  /* Penanda dipasang SESUDAH server mengaku menerima, bukan sebelum
+     mengirim.
+
+     Versi kemarin memasangnya lebih dulu, dan itu justru membuka kembali
+     lubang yang sedang ditutup: kalau tulisannya ditolak server, Firestore
+     membatalkan perubahan lokalnya lalu mengabarkan daftar tanpa catatan
+     itu — sementara catatannya sudah terlanjur bertanda "sudah di server".
+     Penggabungan pun menyimpulkan catatan itu sengaja dihapus, dan nota
+     yang gagal terkirim ikut lenyap. Persis keluhan yang muncul lagi
+     sesudah versi 22.
+
+     Saat offline janji ini menggantung sampai sambungan kembali, jadi
+     penandanya tetap kosong dan catatannya tetap terlindungi. */
+  function tandaiTerkirim(koleksi, id) {
+    const kini = (state[koleksi] || []).find((d) => String(d.id) === String(id));
+    if (!kini || kini[TANDA]) return;
+    kini[TANDA] = true;
+    simpan();
+  }
+
   const catat = (koleksi, doc) => {
-    if (!awanAktif) return;
-    if (doc && !doc[TANDA]) {
-      doc[TANDA] = true;
-      simpan();
-    }
-    Awan.tulis(koleksi, doc);
+    if (!awanAktif || !doc) return;
+    const id = doc.id;
+    const janji = Awan.tulis(koleksi, doc);
+    if (janji) janji.then(() => tandaiTerkirim(koleksi, id)).catch(() => {});
   };
-  const buang = (koleksi, id) => { if (awanAktif) Awan.hapus(koleksi, id); };
+  const buang = (koleksi, id) => { if (awanAktif) Awan.hapus(koleksi, id)?.catch(() => {}); };
 
   /* Nomor nota sengaja disimpan per tablet, bukan di server.
 
@@ -803,10 +821,15 @@ window.DB = (function () {
          yang disengaja pemilik dari perangkat lain. */
       const dariServer = isi.map((d) => ({ ...d, [TANDA]: true }));
       const idServer = new Set(dariServer.map((d) => String(d.id)));
-      const belumTerkirim = (state[nama] || []).filter(
-        (d) => !idServer.has(String(d.id)) && !d[TANDA]
+
+      /* Kabar dari simpanan sementara tidak pernah boleh menghapus apa pun.
+         Yang boleh menyimpulkan "ini memang dihapus" hanya kabar yang benar
+         benar datang dari server. */
+      const bolehMenghapus = !!(meta && meta.dariServer);
+      const disimpan = (state[nama] || []).filter(
+        (d) => !idServer.has(String(d.id)) && (!d[TANDA] || !bolehMenghapus)
       );
-      state[nama] = [...dariServer, ...belumTerkirim];
+      state[nama] = [...dariServer, ...disimpan];
     }
 
     if (nama === 'pesanan') state.pesanan.sort((a, b) => (a.dibuat < b.dibuat ? 1 : -1));
@@ -836,13 +859,20 @@ window.DB = (function () {
     for (const nama of ['kategori', 'layanan', 'pengguna', 'pesanan', 'pengeluaran', 'pelanggan']) {
       for (const d of state[nama] || []) {
         if (d[TANDA]) continue;
-        d[TANDA] = true;
-        Awan.tulis(nama, d);
+        catat(nama, d);
         jumlah += 1;
       }
     }
-    if (jumlah) simpan();
     return jumlah;
+  }
+
+  /** Berapa catatan yang belum diakui server. Ditampilkan di Pengaturan. */
+  function belumTerkirim() {
+    const hasil = {};
+    for (const nama of ['layanan', 'pengguna', 'pesanan', 'pengeluaran', 'pelanggan']) {
+      hasil[nama] = (state[nama] || []).filter((d) => !d[TANDA]).length;
+    }
+    return hasil;
   }
 
   /* Pemulihan manual: gabungkan isi server ke perangkat ini.
@@ -874,7 +904,7 @@ window.DB = (function () {
 
   return {
     STATUS, LABEL_STATUS, KATEGORI,
-    pakaiAwan, terapkanDariAwan, gabungDariAwan, kirimYangTertinggal, seluruhState, kodePerangkat,
+    pakaiAwan, terapkanDariAwan, gabungDariAwan, kirimYangTertinggal, belumTerkirim, seluruhState, kodePerangkat,
     pakaiAwanAktif: () => awanAktif,
     tandaiServerSiap, serverSudahSiap: () => serverSiap,
     layananDipulihkan: () => layananDipulihkan,

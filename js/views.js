@@ -1973,25 +1973,41 @@ window.Views = (function () {
     if (!kotak) return;
     const st = DB.seluruhState();
     const cadangan = DB.infoCadanganOtomatis();
+    const belum = DB.belumTerkirim();
     const baris = [
-      ['Pesanan', st.pesanan.length, cadangan?.pesanan, server?.pesanan],
-      ['Pelanggan', st.pelanggan.length, cadangan?.pelanggan, server?.pelanggan],
-      ['Pengeluaran', st.pengeluaran.length, cadangan?.pengeluaran, server?.pengeluaran],
-      ['Layanan', st.layanan.length, undefined, server?.layanan],
-      ['Pengguna', st.pengguna.length, undefined, server?.pengguna],
+      ['Pesanan', st.pesanan.length, belum.pesanan, cadangan?.pesanan, server?.pesanan],
+      ['Pelanggan', st.pelanggan.length, belum.pelanggan, cadangan?.pelanggan, server?.pelanggan],
+      ['Pengeluaran', st.pengeluaran.length, belum.pengeluaran, cadangan?.pengeluaran, server?.pengeluaran],
+      ['Layanan', st.layanan.length, belum.layanan, undefined, server?.layanan],
+      ['Pengguna', st.pengguna.length, belum.pengguna, undefined, server?.pengguna],
     ];
     const sel = (n) => (n === undefined || n === null ? '<span class="muted">–</span>' : U.angka(n));
+    const totalBelum = Object.values(belum).reduce((a, b) => a + b, 0);
 
     const serverLebihBanyak =
       server && (server.pesanan > st.pesanan.length || server.pelanggan > st.pelanggan.length);
 
     kotak.innerHTML = `
       <div class="table-wrap"><table>
-        <thead><tr><th></th><th class="right">Perangkat ini</th><th class="right">Salinan otomatis</th><th class="right">Server</th></tr></thead>
+        <thead><tr><th></th><th class="right">Perangkat ini</th><th class="right">Belum terkirim</th><th class="right">Salinan otomatis</th><th class="right">Server</th></tr></thead>
         <tbody>
-          ${baris.map((b) => `<tr><td>${b[0]}</td><td class="right">${sel(b[1])}</td><td class="right">${sel(b[2])}</td><td class="right">${sel(b[3])}</td></tr>`).join('')}
+          ${baris
+            .map(
+              (b) => `<tr><td>${b[0]}</td><td class="right">${sel(b[1])}</td>
+                <td class="right${b[2] ? ' sel-belum' : ''}">${sel(b[2])}</td>
+                <td class="right">${sel(b[3])}</td><td class="right">${sel(b[4])}</td></tr>`
+            )
+            .join('')}
         </tbody>
       </table></div>
+      ${
+        totalBelum
+          ? `<p class="pill pill-warn" style="display:block">${U.angka(totalBelum)} catatan belum diakui server.
+             Selama angka ini belum nol, catatan itu cuma ada di perangkat ini — tapi tidak akan terhapus.
+             Kalau angkanya tidak turun-turun walau ada internet, server menolak tulisan dari aplikasi;
+             periksa aturan Firestore.</p>`
+          : ''
+      }
       ${cadangan ? `<small class="muted">Salinan otomatis dibuat ${esc(U.tanggalJam(cadangan.waktu))}.</small>` : '<small class="muted">Belum ada salinan otomatis di perangkat ini.</small>'}
       ${
         serverLebihBanyak

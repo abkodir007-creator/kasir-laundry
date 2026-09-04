@@ -1965,6 +1965,44 @@ window.Views = (function () {
 
   /** Kartu status server di halaman Pengaturan: sambungan, kode perangkat,
       dan tombol memindahkan data lama ke server. */
+  /* Tabel pembanding "di mana data saya". Dibuat setelah satu perangkat
+     kehilangan isinya dan tidak ada satu pun cara melihat apakah salinannya
+     masih ada di tempat lain — pemiliknya hanya bisa menebak. */
+  function gambarPeriksaData(el, server) {
+    const kotak = el.querySelector('#periksaData');
+    if (!kotak) return;
+    const st = DB.seluruhState();
+    const cadangan = DB.infoCadanganOtomatis();
+    const baris = [
+      ['Pesanan', st.pesanan.length, cadangan?.pesanan, server?.pesanan],
+      ['Pelanggan', st.pelanggan.length, cadangan?.pelanggan, server?.pelanggan],
+      ['Pengeluaran', st.pengeluaran.length, cadangan?.pengeluaran, server?.pengeluaran],
+      ['Layanan', st.layanan.length, undefined, server?.layanan],
+      ['Pengguna', st.pengguna.length, undefined, server?.pengguna],
+    ];
+    const sel = (n) => (n === undefined || n === null ? '<span class="muted">–</span>' : U.angka(n));
+
+    const serverLebihBanyak =
+      server && (server.pesanan > st.pesanan.length || server.pelanggan > st.pelanggan.length);
+
+    kotak.innerHTML = `
+      <div class="table-wrap"><table>
+        <thead><tr><th></th><th class="right">Perangkat ini</th><th class="right">Salinan otomatis</th><th class="right">Server</th></tr></thead>
+        <tbody>
+          ${baris.map((b) => `<tr><td>${b[0]}</td><td class="right">${sel(b[1])}</td><td class="right">${sel(b[2])}</td><td class="right">${sel(b[3])}</td></tr>`).join('')}
+        </tbody>
+      </table></div>
+      ${cadangan ? `<small class="muted">Salinan otomatis dibuat ${esc(U.tanggalJam(cadangan.waktu))}.</small>` : '<small class="muted">Belum ada salinan otomatis di perangkat ini.</small>'}
+      ${
+        serverLebihBanyak
+          ? `<p class="pill pill-warn" style="display:block">Server menyimpan lebih banyak catatan daripada perangkat ini.
+             Datanya <b>tidak hilang</b> — perangkat ini yang tertinggal. Biarkan tersambung sampai angkanya sama,
+             dan <b>jangan</b> menekan "Pindahkan data ke server" dari perangkat ini.</p>`
+          : ''
+      }
+      <div class="mt"></div>`;
+  }
+
   function gambarKartuServer(el) {
     const kotak = el.querySelector('#kartuServer');
     if (!kotak) return;
@@ -2019,12 +2057,34 @@ window.Views = (function () {
     kotak.querySelector('#btnPindah')?.addEventListener('click', async () => {
       const state = DB.seluruhState();
       const jumlah = state.pesanan.length + state.pengeluaran.length + state.pelanggan.length + state.layanan.length;
-      let berisi = false;
+
+      /* Sebelum ini tombol ini hanya memperingatkan lalu tetap melanjutkan.
+         Itulah jalan yang dulu menghapus data toko: satu perangkat yang
+         isinya sudah telanjur kosong menekan tombol ini, dan keadaan kosong
+         itu jadi versi resmi di server lalu ikut mengosongkan yang lain.
+
+         Peringatan saja tidak cukup untuk tombol yang bisa menghapus
+         seluruh catatan toko. Sekarang perangkat yang catatannya LEBIH
+         SEDIKIT daripada server ditolak, bukan ditanyai. Yang perlu dibaca
+         pemilik cuma satu: perangkat mana yang datanya paling lengkap. */
+      let server = null;
       try {
-        berisi = await Awan.serverBerisi();
+        server = await Awan.hitungServer();
       } catch (e) {
-        return U.toast('Tidak bisa memeriksa server: ' + e.message);
+        return U.toast('Tidak bisa memeriksa server: ' + (e?.message || e?.code || 'gagal'));
       }
+      const kurang = ['pesanan', 'pelanggan', 'pengeluaran'].filter((k) => server[k] > state[k].length);
+      if (kurang.length) {
+        const rinci = kurang.map((k) => `${k} ${state[k].length} lawan ${server[k]}`).join(', ');
+        await U.konfirmasi(
+          'Dibatalkan — server lebih lengkap',
+          `Server menyimpan lebih banyak catatan daripada perangkat ini (${rinci}). Mengunggah dari sini akan menghapus selisihnya di semua perangkat. Tunggu sampai perangkat ini selesai menerima data dari server, atau lakukan dari perangkat yang datanya paling lengkap.`,
+          'Mengerti'
+        );
+        return;
+      }
+
+      const berisi = server.pesanan > 0 || server.layanan > 0;
       const ya = await U.konfirmasi(
         berisi ? 'Server sudah berisi data' : 'Pindahkan data ke server?',
         berisi
@@ -2153,6 +2213,14 @@ window.Views = (function () {
           iPad/Safari: tombol Bagikan → <b>Add to Home Screen</b>.<br>
           Setelah dipasang, aplikasi bisa dibuka tanpa internet.</p>
           <hr style="border:0;border-top:1px solid var(--border);margin:16px 0">
+          <h3>Periksa Data</h3>
+          <p class="muted">Berapa catatan yang ada di perangkat ini, di salinan otomatisnya,
+          dan di server. Kalau satu perangkat mendadak kosong, di sinilah ketahuan datanya
+          masih ada di mana.</p>
+          <div id="periksaData"></div>
+          <button class="btn btn-block" id="btnPeriksaServer" type="button">🔍 Hitung Catatan di Server</button>
+          <small class="muted">Hanya membaca. Tidak mengubah apa pun, di perangkat maupun di server.</small>
+          <hr style="border:0;border-top:1px solid var(--border);margin:16px 0">
           <h3>Versi Aplikasi</h3>
           <p class="muted">Perangkat ini sedang menjalankan versi <b id="versiApp">${esc(U.versiApp())}</b>.
           Bandingkan angka ini antara tablet dan HP: kalau berbeda, yang angkanya lebih kecil masih
@@ -2164,6 +2232,22 @@ window.Views = (function () {
       </div>`;
 
     gambarKartuServer(el);
+
+    gambarPeriksaData(el);
+
+    el.querySelector('#btnPeriksaServer').addEventListener('click', async (e) => {
+      const tombol = e.currentTarget;
+      tombol.disabled = true;
+      tombol.textContent = 'Menghitung…';
+      try {
+        const server = await Awan.hitungServer();
+        gambarPeriksaData(el, server);
+      } catch (err) {
+        U.toast('Tidak bisa membaca server: ' + (err?.message || err?.code || 'gagal'));
+      }
+      tombol.disabled = false;
+      tombol.textContent = '🔍 Hitung Catatan di Server';
+    });
 
     el.querySelector('#btnPerbarui').addEventListener('click', async () => {
       const ya = await U.konfirmasi(

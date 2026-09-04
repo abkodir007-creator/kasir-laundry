@@ -261,6 +261,22 @@ window.Awan = (function () {
     return false;
   }
 
+  /* Berapa catatan yang benar-benar ada DI SERVER.
+
+     Sengaja memaksa source 'server': tanpa itu Firestore boleh menjawab dari
+     simpanan lokalnya sendiri, dan angka yang keluar cuma cerminan perangkat
+     ini — persis pertanyaan yang sedang ingin dijawab pemilik saat datanya
+     hilang di satu perangkat. */
+  async function hitungServer() {
+    if (!aktif()) throw new Error('Belum tersambung ke akun toko');
+    const hasil = {};
+    for (const nama of KOLEKSI) {
+      const snap = await induk().collection(nama).get({ source: 'server' });
+      hasil[nama] = snap.size;
+    }
+    return hasil;
+  }
+
   const aktif = () => !!(dbAwan && akun());
   const sudahSiap = () => siap;
   const jumlahTertunda = () => tertunda;
@@ -268,7 +284,7 @@ window.Awan = (function () {
   return {
     KONFIG, TOKO, KOLEKSI,
     tersedia, mulai, akun, pantauAkun, masukToko, keluarToko, periksaSandiToko,
-    sinkronkan, hentikan, tulis, hapus, tulisToko, unggahSemua, serverBerisi,
+    sinkronkan, hentikan, tulis, hapus, tulisToko, unggahSemua, serverBerisi, hitungServer,
     aktif, sudahSiap, jumlahTertunda,
   };
 })();

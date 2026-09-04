@@ -2019,6 +2019,12 @@ window.Views = (function () {
       <div class="mt"></div>`;
   }
 
+  /* Dibaca langsung dari lencana status yang dipelihara app.js, supaya
+     tidak ada dua sumber kebenaran yang bisa berbeda isi. */
+  const lencana = () => document.getElementById('netStatus');
+  const teksStatus = () => (lencana()?.textContent || '').trim() || 'Tidak diketahui';
+  const kelasStatus = () => (lencana()?.className || 'pill pill-muted').replace('pill ', '');
+
   function gambarKartuServer(el) {
     const kotak = el.querySelector('#kartuServer');
     if (!kotak) return;
@@ -2027,6 +2033,9 @@ window.Views = (function () {
 
     kotak.innerHTML = `
       <h3 style="margin-top:0">Server &amp; Perangkat</h3>
+      <!-- Status sambungan diulang di sini karena di layar HP kaki menu
+           samping — tempat aslinya — memang tidak ditampilkan sama sekali. -->
+      <p style="margin:0 0 10px"><span class="pill ${esc(kelasStatus())}">${esc(teksStatus())}</span></p>
       ${
         !adaAwan
           ? '<p class="muted">Versi ini berjalan tanpa server. Data hanya ada di tablet ini.</p>'

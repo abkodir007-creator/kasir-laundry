@@ -114,8 +114,51 @@
   const status = document.getElementById('netStatus');
   let tertunda = 0;
   let galatServer = null;
+
+  /* Bilah peringatan yang menutup bagian atas layar.
+
+     Status sambungan selama ini duduk di kaki menu samping — dan di layar
+     HP menu samping berubah jadi baris menu di bawah, dengan .nav-foot
+     disembunyikan sama sekali. Artinya justru di perangkat yang dipakai
+     melayani, status sambungan TIDAK PERNAH terlihat. Server bisa menolak
+     seluruh tulisan seharian tanpa satu pun tanda di layar kasir.
+
+     Bilah ini hanya muncul kalau server benar-benar menolak. Offline biasa
+     tidak memunculkannya, karena offline memang keadaan yang normal di
+     sini dan datanya toh tetap tersimpan. */
+  const bilah = document.createElement('button');
+  bilah.id = 'bilahGalat';
+  bilah.type = 'button';
+  bilah.hidden = true;
+  bilah.addEventListener('click', () => buka('pengaturan'));
+  document.body.appendChild(bilah);
+
+  /* Tinggi bilah diukur, bukan ditebak. Kalimatnya membungkus jadi dua baris
+     di layar HP dan tiga baris di layar sempit, jadi angka tetap apa pun akan
+     salah di salah satu ukuran — dan yang tertutup adalah judul halaman. */
+  function ukurBilah() {
+    document.documentElement.style.setProperty(
+      '--tinggi-bilah',
+      (bilah.hidden ? 0 : bilah.offsetHeight) + 'px'
+    );
+  }
+
+  function perbaruiBilah(bermasalah) {
+    if (bermasalah) {
+      bilah.innerHTML =
+        '<b>⚠️ Server menolak menyimpan.</b> Nota tetap aman di perangkat ini, ' +
+        'tapi belum sampai ke perangkat lain. Ketuk untuk memeriksa.';
+    }
+    bilah.hidden = !bermasalah;
+    document.body.classList.toggle('ada-galat', !!bermasalah);
+    ukurBilah();
+  }
+
+  window.addEventListener('resize', ukurBilah);
+
   function perbaruiStatus() {
     const online = navigator.onLine;
+    perbaruiBilah(DB.pakaiAwanAktif() && galatServer);
     if (DB.pakaiAwanAktif() && galatServer) {
       // Kegagalan server tidak boleh diam-diam. Kalau aturan Firestore
       // menolak akun ini, datanya tetap tampil dari simpanan tablet dan

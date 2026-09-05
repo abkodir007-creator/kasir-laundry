@@ -86,7 +86,7 @@ window.Receipt = (function () {
     ${p.diskon ? `<tr><td>Diskon</td><td class="r">-${U.rupiah(p.diskon)}</td></tr>` : ''}
     ${p.pembulatan ? `<tr><td>Pembulatan</td><td class="r">${p.pembulatan > 0 ? '+' : '−'}${U.rupiah(Math.abs(p.pembulatan))}</td></tr>` : ''}
     <tr class="tot"><td>TOTAL</td><td class="r">${U.rupiah(p.total)}</td></tr>
-    <tr><td>Bayar (${U.esc(p.metode)})</td><td class="r">${U.rupiah(diterima)}</td></tr>
+    <tr><td>${p.metode === 'nanti' && !p.dibayar ? 'Bayar' : `Bayar (${U.esc(p.metode)})`}</td><td class="r">${U.rupiah(diterima)}</td></tr>
     ${
       sisa > 0
         ? `<tr><td>SISA</td><td class="r">${U.rupiah(sisa)}</td></tr>`

@@ -52,9 +52,10 @@ window.DB = (function () {
       catatanStruk: 'Bersih - Wangi - Cepat - Terpercaya. Terima kasih! Barang yang tidak diambil dalam 30 hari di luar tanggung jawab kami.',
       lebarStruk: '58',         // '58' atau '80', mengikuti lebar kertas printer
       cetakSaatSimpan: 'tanya',      // 'tanya' | 'pelanggan' | 'toko' | 'dua'
-      pembulatan: 500,               // kelipatan pembulatan total; 0 = tidak dibulatkan
-      arahPembulatan: 'terdekat',    // 'terdekat' | 'bawah' | 'atas'
-      bulatkanTunaiSaja: true,       // transfer dan QRIS tidak butuh kembalian
+      /* Batas pembulatan yang boleh dilakukan kasir, sekaligus kelipatan
+         dua tombol saran di keranjang. Angkanya BUKAN pembulatan otomatis:
+         yang menentukan ke atas atau ke bawah tetap orang di meja kasir. */
+      pembulatan: 1000,
     },
     kategori: KATEGORI_AWAL,
     layanan: LAYANAN_AWAL,
@@ -590,11 +591,16 @@ window.DB = (function () {
     catat('pesanan', p);
   }
 
-  function lunasi(id, jumlah, metode) {
+  /* Cara bayar ditentukan saat uangnya benar-benar diterima, bukan saat nota
+     dibuat. Pelanggan yang memilih "Bayar Nanti" kerap berubah pikiran di
+     hari pengambilan, dan sebelumnya perubahan itu tidak terekam sama sekali
+     — pelunasan memakai cara bayar yang tersimpan di awal, sehingga
+     pemisahan tunai dan non-tunai di laporan ikut salah. */
+  function lunasi(id, jumlah, metode, diterima) {
     const p = cariPesanan(id);
     if (!p) return;
     p.dibayar = Number(jumlah);
-    p.diterima = Math.max(p.diterima || 0, p.dibayar);
+    p.diterima = Math.max(p.diterima || 0, Number(diterima) || p.dibayar);
     p.metode = metode || p.metode;
     p.lunas = p.dibayar >= p.total;
     simpan();

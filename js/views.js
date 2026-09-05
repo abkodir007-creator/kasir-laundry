@@ -280,6 +280,12 @@ window.Views = (function () {
               <label for="inpDiskon">Diskon (Rp)</label>
               <input class="input" id="inpDiskon" type="number" inputmode="numeric" min="0" step="500" value="0">
             </div>
+            <div class="field" id="kotakBulat">
+              <label for="inpBulat">Dibulatkan jadi (Rp)</label>
+              <input class="input" id="inpBulat" type="number" inputmode="numeric" placeholder="Kosongkan bila tidak dibulatkan">
+              <div class="saran-bulat" id="saranBulat"></div>
+              <small class="muted" id="pesanBulat"></small>
+            </div>
             <div class="sum-line" id="barisBulat" hidden><span>Pembulatan</span><b id="sumBulat">Rp 0</b></div>
             <div class="sum-total"><span>Total</span><span id="sumTotal">Rp 0</span></div>
             <div class="field">
@@ -288,6 +294,7 @@ window.Views = (function () {
                 <button type="button" class="is-active" data-metode="tunai">Tunai</button>
                 <button type="button" data-metode="transfer">Transfer</button>
                 <button type="button" data-metode="qris">QRIS</button>
+                <button type="button" data-metode="nanti">Bayar Nanti</button>
               </div>
             </div>
             <div class="field">
@@ -439,22 +446,63 @@ window.Views = (function () {
       hitung();
     }
 
+    /* Pembulatan diserahkan ke kasir, bukan dihitung sendiri oleh aplikasi.
+
+       Versi sebelumnya membulatkan otomatis ke angka terdekat. Di meja kasir
+       keputusannya tidak sesederhana itu — kadang dibulatkan ke bawah karena
+       pelanggan langganan, kadang ke atas karena uangnya pas. Yang tahu
+       cuma orang yang sedang berdiri di kasir.
+
+       Kolomnya dibiarkan kosong: kosong berarti tidak dibulatkan sama
+       sekali. Dua tombol saran disediakan supaya tidak perlu mengetik, dan
+       selisihnya dibatasi sebesar `batasBulat` supaya salah ketik — 2.400
+       padahal maksudnya 24.000 — tertahan sebelum jadi nota. */
+    const batasBulat = () => Number(DB.toko().pembulatan) || 0;
+
+    function gambarSaranBulat(pas) {
+      const kotak = el.querySelector('#saranBulat');
+      const k = batasBulat();
+      if (!k || !pas || pas % k === 0) return (kotak.innerHTML = '');
+      const bawah = U.bulatkan(pas, k, 'bawah');
+      const atas = U.bulatkan(pas, k, 'atas');
+      kotak.innerHTML =
+        `<button type="button" class="btn btn-sm" data-bulat="${bawah}">↓ ${U.rupiah(bawah)}</button>` +
+        `<button type="button" class="btn btn-sm" data-bulat="${atas}">↑ ${U.rupiah(atas)}</button>`;
+    }
+
     function hitung() {
       const subtotal = pos.keranjang.reduce((a, i) => a + i.qty * i.harga, 0);
       const diskon = Math.min(Number(el.querySelector('#inpDiskon').value) || 0, subtotal);
-      const sebelumBulat = subtotal - diskon;
+      const pas = subtotal - diskon;
 
-      /* Pembulatan hanya menyentuh cara bayar yang butuh kembalian. Transfer
-         dan QRIS dibayar dengan angka persis, jadi membulatkannya cuma
-         menciptakan selisih yang tidak bisa dijelaskan saat mencocokkan
-         mutasi rekening. */
-      const t = DB.toko();
+      const inpBulat = el.querySelector('#inpBulat');
+      inpBulat.placeholder = pas ? `Kosongkan bila tidak dibulatkan (${U.rupiah(pas)})` : 'Kosongkan bila tidak dibulatkan';
+      gambarSaranBulat(pas);
+
+      const isiBulat = inpBulat.value.trim();
+      const diminta = isiBulat === '' ? pas : Number(isiBulat) || 0;
+      const selisih = diminta - pas;
+      const batas = batasBulat();
+      const bulatSalah = isiBulat !== '' && (diminta <= 0 || (batas > 0 && Math.abs(selisih) > batas));
+
+      const total = bulatSalah ? pas : diminta;
+      const pembulatan = bulatSalah ? 0 : selisih;
+
+      el.querySelector('#kotakBulat').classList.toggle('kotak-salah', bulatSalah);
+      el.querySelector('#pesanBulat').textContent = bulatSalah
+        ? `Selisihnya lebih dari ${U.rupiah(batas)}. Untuk potongan sebesar itu pakai kolom Diskon.`
+        : '';
+
+      /* "Bayar Nanti" berarti belum ada uang yang berpindah, jadi kolom uang
+         diterima ditutup supaya tidak ada angka yang tercatat sebagai
+         pemasukan hari ini padahal barangnya belum diambil. */
       const metode = el.querySelector('#segMetode .is-active')?.dataset.metode || 'tunai';
-      const berlaku = !t.bulatkanTunaiSaja || metode === 'tunai';
-      const total = berlaku ? U.bulatkan(sebelumBulat, t.pembulatan, t.arahPembulatan) : sebelumBulat;
-      const pembulatan = total - sebelumBulat;
+      const nanti = metode === 'nanti';
+      const inpBayar = el.querySelector('#inpBayar');
+      inpBayar.disabled = nanti;
+      if (nanti) inpBayar.value = '0';
+      const bayar = nanti ? 0 : Number(inpBayar.value) || 0;
 
-      const bayar = Number(el.querySelector('#inpBayar').value) || 0;
       el.querySelector('#sumSubtotal').textContent = U.rupiah(subtotal);
       const barisBulat = el.querySelector('#barisBulat');
       barisBulat.hidden = !pembulatan;
@@ -466,12 +514,13 @@ window.Views = (function () {
       const adaNama = !!el.querySelector('#inpNama').value.trim();
       const adaTolak = pos.keranjang.some((i) => i.tersedia === false);
       el.querySelector('#btnSimpan').disabled =
-        pos.keranjang.length === 0 || !adaNama || !pos.estimasi || adaTolak;
+        pos.keranjang.length === 0 || !adaNama || !pos.estimasi || adaTolak || bulatSalah;
       const info = el.querySelector('#infoKembali');
-      if (bayar === 0) info.textContent = 'Belum dibayar — pesanan ditandai "belum lunas".';
+      if (nanti) info.textContent = 'Dibayar saat pengambilan — cara bayarnya dipilih nanti.';
+      else if (bayar === 0) info.textContent = 'Belum dibayar — pesanan ditandai "belum lunas".';
       else if (bayar < total) info.textContent = `Kurang ${U.rupiah(total - bayar)} (bayar sebagian).`;
       else info.textContent = `Kembalian ${U.rupiah(bayar - total)}.`;
-      return { subtotal, diskon, total, bayar, pembulatan };
+      return { subtotal, diskon, total, bayar, pembulatan, metode };
     }
 
     /* ---- Estimasi selesai ----
@@ -584,6 +633,13 @@ window.Views = (function () {
       gambarKeranjang();
     });
 
+    el.querySelector('#inpBulat').addEventListener('input', hitung);
+    el.querySelector('#saranBulat').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-bulat]');
+      if (!b) return;
+      el.querySelector('#inpBulat').value = b.dataset.bulat;
+      hitung();
+    });
     el.querySelector('#inpDiskon').addEventListener('input', hitung);
     el.querySelector('#inpBayar').addEventListener('input', hitung);
 
@@ -626,7 +682,7 @@ window.Views = (function () {
 
       const item = pos.keranjang.filter((i) => i.qty > 0).map((i) => ({ ...i, subtotal: i.qty * i.harga }));
       if (!item.length) return U.toast('Isi jumlah dulu');
-      const { subtotal, diskon, total, bayar, pembulatan } = hitung();
+      const { subtotal, diskon, total, bayar, pembulatan, metode } = hitung();
       const p = DB.buatPesanan({
         nama: namaPelanggan,
         hp: el.querySelector('#inpHp').value,
@@ -640,7 +696,7 @@ window.Views = (function () {
         jam: pos.estimasi.jam,
         estimasiNama: pos.estimasi.nama,
         kasir: Auth.aktif()?.nama,
-        metode: el.querySelector('#segMetode .is-active').dataset.metode,
+        metode,
         catatan: el.querySelector('#inpCatatan').value,
       });
       sedangSimpan = true;
@@ -847,10 +903,17 @@ window.Views = (function () {
             <div class="muted" style="font-size:12px">${esc(p.pelanggan.hp || '-')}</div>
           </td>
           <td>${U.rupiah(p.total)}</td>
-          <td>${p.lunas ? '<span class="pill pill-ok">Lunas</span>' : `<span class="pill pill-danger">Sisa ${U.rupiah(p.total - p.dibayar)}</span>`}</td>
+          <td>${
+            p.lunas
+              ? '<span class="pill pill-ok">Lunas</span>'
+              : p.metode === 'nanti' && !p.dibayar
+                ? `<span class="pill pill-warn">Bayar saat ambil ${U.rupiah(p.total)}</span>`
+                : `<span class="pill pill-danger">Sisa ${U.rupiah(p.total - p.dibayar)}</span>`
+          }</td>
           <td>${badgeStatus(p.status)}</td>
           <td class="right" style="white-space:nowrap">
             ${berikut ? `<button class="btn btn-sm btn-primary" data-maju="${p.id}">→ ${esc(DB.LABEL_STATUS[berikut])}</button>` : ''}
+            ${p.lunas ? '' : `<button class="btn btn-sm" data-bayar="${p.id}">💰 Bayar</button>`}
             <button class="btn btn-sm" data-detail="${p.id}">Detail</button>
           </td>
         </tr>`;
@@ -873,15 +936,40 @@ window.Views = (function () {
       gambar();
     });
 
-    tbody.addEventListener('click', (e) => {
+    /* Menerima pembayaran lalu menandai cucian diambil adalah dua tindakan
+       yang di meja kasir terjadi dalam satu tarikan napas. Dulu tombol
+       bayarnya hanya ada di dalam Detail, jadi kasir harus membuka nota,
+       menutupnya, baru menekan "diambil". */
+    async function terimaBayar(id, sesudah) {
+      const p = DB.cariPesanan(id);
+      if (!p) return false;
+      const hasil = await dialogBayar(p);
+      if (!hasil) return false;
+      DB.lunasi(p.id, hasil.dibayar, hasil.metode, hasil.diterima);
+      U.toast(
+        hasil.dibayar >= p.total
+          ? `Lunas ${U.rupiah(hasil.dibayar)} (${namaBayar(hasil.metode)})`
+          : `Dibayar sebagian ${U.rupiah(hasil.dibayar)} (${namaBayar(hasil.metode)})`
+      );
+      sesudah && sesudah();
+      return DB.cariPesanan(id).lunas;
+    }
+
+    tbody.addEventListener('click', async (e) => {
       const maju = e.target.closest('[data-maju]');
       const detail = e.target.closest('[data-detail]');
+      const bayar = e.target.closest('[data-bayar]');
+      if (bayar) {
+        await terimaBayar(bayar.dataset.bayar, gambar);
+        return;
+      }
       if (maju) {
         const p = DB.cariPesanan(maju.dataset.maju);
         const berikut = DB.STATUS[DB.STATUS.indexOf(p.status) + 1];
         if (berikut === 'diambil' && !p.lunas) {
-          U.toast('Lunasi pembayaran dulu di menu Detail');
-          return;
+          // Langsung ditawari membayar, bukan disuruh mencari sendiri.
+          const lunas = await terimaBayar(p.id, gambar);
+          if (!lunas) return;
         }
         DB.ubahStatus(p.id, berikut);
         U.toast(`${p.kode} → ${DB.LABEL_STATUS[berikut]}`);
@@ -917,7 +1005,7 @@ window.Views = (function () {
         ${p.diskon ? `<tr><td>Diskon</td><td class="right">-${U.rupiah(p.diskon)}</td></tr>` : ''}
         ${p.pembulatan ? `<tr><td>Pembulatan</td><td class="right">${p.pembulatan > 0 ? '+' : '−'}${U.rupiah(Math.abs(p.pembulatan))}</td></tr>` : ''}
         <tr><td><b>Total</b></td><td class="right"><b>${U.rupiah(p.total)}</b></td></tr>
-        <tr><td>Dibayar (${esc(p.metode)})</td><td class="right">${U.rupiah(p.dibayar)}</td></tr>
+        <tr><td>Dibayar${p.dibayar ? ` (${esc(namaBayar(p.metode))})` : ''}</td><td class="right">${U.rupiah(p.dibayar)}</td></tr>
         ${sisa ? `<tr><td><b>Sisa</b></td><td class="right"><b>${U.rupiah(sisa)}</b></td></tr>` : ''}
       </table></div>
       ${p.catatan ? `<p class="muted">Catatan: ${esc(p.catatan)}</p>` : ''}
@@ -925,7 +1013,7 @@ window.Views = (function () {
         <button type="button" class="btn" data-aksi="cetak">🖨️ Struk Pelanggan</button>
         <button type="button" class="btn" data-aksi="label">🏷️ Label Toko</button>
         <button type="button" class="btn" data-aksi="wa" ${p.pelanggan.hp ? '' : 'disabled'}>💬 Kirim WA</button>
-        ${sisa ? `<button type="button" class="btn btn-primary" data-aksi="lunas">✅ Tandai Lunas</button>` : ''}
+        ${sisa ? `<button type="button" class="btn btn-primary" data-aksi="lunas">💰 Terima Pembayaran</button>` : ''}
         ${Auth.isOwner() ? `<button type="button" class="btn btn-danger" data-aksi="hapus">🗑️ Hapus</button>` : ''}
       </div>
       <div class="modal-actions">
@@ -940,9 +1028,15 @@ window.Views = (function () {
       if (aksi === 'label') Receipt.cetak(p, 'toko');
       if (aksi === 'wa') Receipt.kirimWA(p);
       if (aksi === 'lunas') {
-        DB.lunasi(p.id, p.total, p.metode);
         modal.close();
-        U.toast('Pembayaran dilunasi');
+        const hasil = await dialogBayar(p);
+        if (!hasil) return;
+        DB.lunasi(p.id, hasil.dibayar, hasil.metode, hasil.diterima);
+        U.toast(
+          hasil.dibayar >= p.total
+            ? `Lunas ${U.rupiah(hasil.dibayar)} (${namaBayar(hasil.metode)})`
+            : `Dibayar sebagian ${U.rupiah(hasil.dibayar)} (${namaBayar(hasil.metode)})`
+        );
         setelahUbah && setelahUbah();
       }
       if (aksi === 'hapus') {
@@ -2041,6 +2135,96 @@ window.Views = (function () {
       <div class="mt"></div>`;
   }
 
+  const NAMA_BAYAR = { tunai: 'Tunai', transfer: 'Transfer', qris: 'QRIS', nanti: 'Bayar nanti' };
+  const namaBayar = (m) => NAMA_BAYAR[m] || m || 'Tunai';
+
+  /* Dialog terima pembayaran, dipakai saat pelanggan mengambil cucian.
+
+     Cara bayar tidak lagi dikunci sejak nota dibuat. Pelanggan yang memilih
+     "Bayar Nanti" sering berubah pikiran di hari pengambilan — datang
+     berniat tunai lalu membayar QRIS, atau sebaliknya — dan sebelumnya
+     perubahan itu tidak bisa dicatat sama sekali: tombol "Tandai Lunas"
+     memakai cara bayar yang tersimpan di awal, sehingga laporan tunai dan
+     non-tunai ikut salah. */
+  function dialogBayar(p) {
+    return new Promise((resolve) => {
+      let modal = document.getElementById('modalBayar');
+      if (!modal) {
+        modal = document.createElement('dialog');
+        modal.id = 'modalBayar';
+        modal.className = 'modal';
+        modal.innerHTML = '<form method="dialog" class="modal-inner"></form>';
+        document.body.appendChild(modal);
+      }
+      const inner = modal.querySelector('.modal-inner');
+      const sisa = Math.max(0, p.total - (p.dibayar || 0));
+      inner.innerHTML = `
+        <h3>Terima pembayaran</h3>
+        <p class="muted" style="margin-top:-6px">${esc(p.kode)} • ${esc(p.pelanggan.nama)}</p>
+        <div class="sukses-rincian">
+          <div><span>Total nota</span><b>${U.rupiah(p.total)}</b></div>
+          ${p.dibayar ? `<div><span>Sudah dibayar</span><b>${U.rupiah(p.dibayar)}</b></div>` : ''}
+          <div class="sukses-sisa"><span>Sisa</span><b>${U.rupiah(sisa)}</b></div>
+        </div>
+        <div class="field mt">
+          <label>Cara bayar</label>
+          <div class="seg" id="bayarMetode">
+            <button type="button" class="is-active" data-metode="tunai">Tunai</button>
+            <button type="button" data-metode="transfer">Transfer</button>
+            <button type="button" data-metode="qris">QRIS</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="bayarJumlah">Uang diterima (Rp)</label>
+          <input class="input" id="bayarJumlah" type="number" inputmode="numeric" min="0" step="1000" value="${sisa}">
+          <small class="muted" id="bayarInfo"></small>
+        </div>
+        <div class="modal-actions">
+          <button type="submit" class="btn" value="batal">Batal</button>
+          <button type="button" class="btn btn-primary" data-aksi="terima">Terima Pembayaran</button>
+        </div>`;
+
+      const jumlahEl = inner.querySelector('#bayarJumlah');
+      const info = inner.querySelector('#bayarInfo');
+      const kabari = () => {
+        const j = Number(jumlahEl.value) || 0;
+        info.textContent =
+          j >= sisa ? `Kembalian ${U.rupiah(j - sisa)}.` : `Kurang ${U.rupiah(sisa - j)} — dicatat sebagai bayar sebagian.`;
+      };
+      jumlahEl.addEventListener('input', kabari);
+      kabari();
+
+      inner.addEventListener('click', (e) => {
+        const m = e.target.closest('[data-metode]');
+        if (m) {
+          inner.querySelectorAll('#bayarMetode button').forEach((x) => x.classList.remove('is-active'));
+          m.classList.add('is-active');
+          return;
+        }
+        if (e.target.closest('[data-aksi="terima"]')) {
+          modal.returnValue = 'terima';
+          modal.close();
+        }
+      });
+
+      modal.returnValue = 'batal';
+      modal.showModal();
+      modal.addEventListener(
+        'close',
+        () => {
+          if (modal.returnValue !== 'terima') return resolve(null);
+          const diterima = Number(jumlahEl.value) || 0;
+          resolve({
+            diterima,
+            dibayar: Math.min(diterima, p.total),
+            metode: inner.querySelector('#bayarMetode .is-active').dataset.metode,
+          });
+        },
+        { once: true }
+      );
+    });
+  }
+
   /* Dibaca langsung dari lencana status yang dipelihara app.js, supaya
      tidak ada dua sumber kebenaran yang bisa berbeda isi. */
   const lencana = () => document.getElementById('netStatus');
@@ -2202,29 +2386,19 @@ window.Views = (function () {
             Ukurannya tertulis di kertas atau kotak printer.</small>
           </div>
           <div class="field">
-            <label for="tBulat">Pembulatan total nota</label>
+            <label for="tBulat">Batas pembulatan di kasir</label>
             <select class="input" id="tBulat">
-              <option value="0"${!Number(t.pembulatan) ? ' selected' : ''}>Tidak dibulatkan</option>
-              <option value="100"${Number(t.pembulatan) === 100 ? ' selected' : ''}>Kelipatan Rp 100</option>
-              <option value="500"${Number(t.pembulatan) === 500 ? ' selected' : ''}>Kelipatan Rp 500</option>
-              <option value="1000"${Number(t.pembulatan) === 1000 ? ' selected' : ''}>Kelipatan Rp 1.000</option>
+              <option value="0"${!Number(t.pembulatan) ? ' selected' : ''}>Tidak boleh dibulatkan</option>
+              <option value="500"${Number(t.pembulatan) === 500 ? ' selected' : ''}>Sampai Rp 500</option>
+              <option value="1000"${Number(t.pembulatan) === 1000 ? ' selected' : ''}>Sampai Rp 1.000</option>
+              <option value="5000"${Number(t.pembulatan) === 5000 ? ' selected' : ''}>Sampai Rp 5.000</option>
             </select>
-            <div class="mt"></div>
-            <label for="tArahBulat">Arah pembulatan</label>
-            <select class="input" id="tArahBulat">
-              <option value="terdekat"${t.arahPembulatan === 'bawah' || t.arahPembulatan === 'atas' ? '' : ' selected'}>Ke angka terdekat</option>
-              <option value="bawah"${t.arahPembulatan === 'bawah' ? ' selected' : ''}>Selalu ke bawah (pelanggan diuntungkan)</option>
-              <option value="atas"${t.arahPembulatan === 'atas' ? ' selected' : ''}>Selalu ke atas</option>
-            </select>
-            <div class="mt"></div>
-            <label class="pilih-baris">
-              <input type="checkbox" id="tBulatTunai"${t.bulatkanTunaiSaja === false ? '' : ' checked'}>
-              <span>Hanya untuk pembayaran tunai</span>
-            </label>
             <small class="muted">Harga per kilogram hampir tidak pernah bulat — 3,4 kg × Rp 7.000 = Rp 23.800 —
-            dan pecahan seratusan itulah yang menyulitkan kembalian. Selisih pembulatan tampil sendiri di
-            keranjang dan di struk, tidak disembunyikan ke dalam diskon. Transfer dan QRIS dibayar dengan
-            angka persis, jadi biasanya tidak perlu ikut dibulatkan.</small>
+            dan pecahan seratusan itulah yang menyulitkan kembalian. Aplikasi <b>tidak</b> membulatkan sendiri:
+            di keranjang ada kolom kosong beserta dua tombol saran, dan yang menentukan ke atas atau ke bawah
+            tetap kasir yang sedang berjaga. Angka di atas hanya membatasi sejauh apa boleh digeser, supaya
+            salah ketik tertahan sebelum jadi nota. Selisihnya tampil sendiri di keranjang dan di struk,
+            tidak disembunyikan ke dalam diskon.</small>
           </div>
           <div class="field">
             <label for="tCetak">Setelah pesanan disimpan</label>
@@ -2359,8 +2533,6 @@ window.Views = (function () {
         lebarStruk: el.querySelector('#tLebar').value,
         cetakSaatSimpan: el.querySelector('#tCetak').value,
         pembulatan: Number(el.querySelector('#tBulat').value) || 0,
-        arahPembulatan: el.querySelector('#tArahBulat').value,
-        bulatkanTunaiSaja: el.querySelector('#tBulatTunai').checked,
       });
       window.SegarkanMerek();
       U.toast('Data toko tersimpan');

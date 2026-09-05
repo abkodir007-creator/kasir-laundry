@@ -364,6 +364,10 @@ tbody tr:last-child td { border-bottom: 0; }
 }
 
 
+.saran-bulat { display: flex; gap: 8px; margin-top: 8px; }
+.saran-bulat .btn { flex: 1; }
+.kotak-salah .input { border-color: var(--danger); }
+.kotak-salah #pesanBulat { color: var(--danger); }
 .pilih-baris { display: flex; align-items: center; gap: 10px; font-size: 14px; }
 .pilih-baris input { width: 20px; height: 20px; }
 .sel-belum { color: var(--warn); font-weight: 700; }

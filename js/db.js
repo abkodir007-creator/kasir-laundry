@@ -52,6 +52,9 @@ window.DB = (function () {
       catatanStruk: 'Bersih - Wangi - Cepat - Terpercaya. Terima kasih! Barang yang tidak diambil dalam 30 hari di luar tanggung jawab kami.',
       lebarStruk: '58',         // '58' atau '80', mengikuti lebar kertas printer
       cetakSaatSimpan: 'tanya',      // 'tanya' | 'pelanggan' | 'toko' | 'dua'
+      pembulatan: 500,               // kelipatan pembulatan total; 0 = tidak dibulatkan
+      arahPembulatan: 'terdekat',    // 'terdekat' | 'bawah' | 'atas'
+      bulatkanTunaiSaja: true,       // transfer dan QRIS tidak butuh kembalian
     },
     kategori: KATEGORI_AWAL,
     layanan: LAYANAN_AWAL,
@@ -535,6 +538,10 @@ window.DB = (function () {
       item: input.item,
       subtotal: input.subtotal,
       diskon: input.diskon || 0,
+      // Selisih pembulatan disimpan sendiri, bukan dilebur ke diskon:
+      // laporan harus bisa memisahkan potongan yang disengaja pemilik dari
+      // sisa receh yang dibulatkan di meja kasir.
+      pembulatan: input.pembulatan || 0,
       total: input.total,
       dibayar: input.dibayar || 0,          // yang diakui masuk kas (maksimal sebesar total)
       diterima: input.diterima || 0,        // uang fisik yang diserahkan pelanggan, untuk hitung kembalian

@@ -358,6 +358,25 @@ window.U = (function () {
     location.replace(alamat.toString());
   }
 
+  /* Pembulatan total nota.
+
+     Harga laundry dihitung per kilogram, jadi totalnya hampir tidak pernah
+     bulat: 3,4 kg x Rp 7.000 = Rp 23.800. Pecahan Rp 100 dan Rp 200 itulah
+     yang menyulitkan kembalian di meja kasir, dan biasanya berakhir jadi
+     "sudah, tidak usah" yang tidak tercatat di mana pun.
+
+     `arah` sengaja tidak dipaksa ke bawah. Membulatkan ke bawah memang
+     menyenangkan pelanggan, tapi kalau dipakai ratusan nota sebulan
+     selisihnya nyata, dan pemilik berhak memilih sendiri. */
+  function bulatkan(nilai, kelipatan, arah) {
+    const k = Number(kelipatan) || 0;
+    const n = Number(nilai) || 0;
+    if (k <= 1 || n <= 0) return n;
+    if (arah === 'bawah') return Math.floor(n / k) * k;
+    if (arah === 'atas') return Math.ceil(n / k) * k;
+    return Math.round(n / k) * k;
+  }
+
   const toast = (pesan) => {
     const el = document.getElementById('toast');
     el.textContent = pesan;
@@ -405,5 +424,5 @@ window.U = (function () {
       modal.addEventListener('close', () => resolve(modal.returnValue === 'ya'), { once: true });
     });
 
-  return { rupiah, angka, tanggal, jam, tanggalJam, hariKunci, hariIni, tambahHari, tambahJam, estimasi, idBaru, esc, waNomor, uraiKontak, uraiLayanan, bacaGambarKecil, toast, konfirmasi, versiApp, perbaruiAplikasi };
+  return { rupiah, angka, tanggal, jam, tanggalJam, hariKunci, hariIni, tambahHari, tambahJam, estimasi, idBaru, esc, waNomor, uraiKontak, uraiLayanan, bacaGambarKecil, toast, konfirmasi, versiApp, perbaruiAplikasi, bulatkan };
 })();

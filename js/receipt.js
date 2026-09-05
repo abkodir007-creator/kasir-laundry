@@ -84,6 +84,7 @@ window.Receipt = (function () {
   <table>
     <tr><td>Subtotal</td><td class="r">${U.rupiah(p.subtotal)}</td></tr>
     ${p.diskon ? `<tr><td>Diskon</td><td class="r">-${U.rupiah(p.diskon)}</td></tr>` : ''}
+    ${p.pembulatan ? `<tr><td>Pembulatan</td><td class="r">${p.pembulatan > 0 ? '+' : '−'}${U.rupiah(Math.abs(p.pembulatan))}</td></tr>` : ''}
     <tr class="tot"><td>TOTAL</td><td class="r">${U.rupiah(p.total)}</td></tr>
     <tr><td>Bayar (${U.esc(p.metode)})</td><td class="r">${U.rupiah(diterima)}</td></tr>
     ${
@@ -190,6 +191,7 @@ window.Receipt = (function () {
       `Pelanggan: ${p.pelanggan.nama}\n\n` +
       `${item}\n\n` +
       (p.diskon ? `Diskon: -${U.rupiah(p.diskon)}\n` : '') +
+      (p.pembulatan ? `Pembulatan: ${p.pembulatan > 0 ? '+' : '−'}${U.rupiah(Math.abs(p.pembulatan))}\n` : '') +
       `*Total: ${U.rupiah(p.total)}*\n` +
       (sisa > 0 ? `Sisa bayar: ${U.rupiah(sisa)}\n` : `Status: LUNAS\n`) +
       `Estimasi selesai: ${U.estimasi(p.estimasiSelesai)}\n\n` +

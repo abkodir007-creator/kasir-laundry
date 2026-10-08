@@ -364,6 +364,8 @@ tbody tr:last-child td { border-bottom: 0; }
 }
 
 
+.cart-item-est { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; }
+.cart-item-est .input { flex: 1; min-width: 0; height: 40px; padding: 6px 10px; font-size: 14px; }
 .saran-bulat { display: flex; gap: 8px; margin-top: 8px; }
 .saran-bulat .btn { flex: 1; }
 .kotak-salah .input { border-color: var(--danger); }

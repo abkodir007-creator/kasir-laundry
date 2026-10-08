@@ -402,19 +402,46 @@ window.Views = (function () {
         : `<p class="empty">Layanan tidak ditemukan.</p>`;
     }
 
-    /* Harga setiap baris keranjang mengikuti estimasi yang dipilih.
+    /* Setiap baris keranjang punya estimasinya sendiri.
 
-       Dipanggil setiap kali estimasi berubah, bukan sekali saat layanan
-       ditambahkan: kasir kerap memilih kecepatannya belakangan, setelah
-       menimbang cucian. */
+       Sebelumnya satu nota hanya boleh satu kecepatan, dan itu memaksa
+       pelanggan yang menitipkan selimut reguler sekaligus seragam kilat
+       dibuatkan dua nota terpisah — dua nomor, dua struk, dua kali antre.
+       Padahal barangnya datang bersama dan diambil bersama.
+
+       Pilihan di bawah keranjang tetap ada sebagai penentu untuk SEMUA
+       baris sekaligus, karena itu keadaan yang paling sering; yang berbeda
+       tinggal diubah per barisnya. Harga ikut estimasi masing-masing baris,
+       bukan satu kecepatan untuk seluruh nota. */
     function hargakanUlang() {
       for (const i of pos.keranjang) {
         const l = DB.cariLayanan(i.layananId);
-        const h = DB.hargaLayanan(l, pos.estimasi?.id);
+        const h = DB.hargaLayanan(l, i.katId);
         i.harga = h.tersedia ? h.harga : 0;
         i.tersedia = h.tersedia;
       }
     }
+
+    /** Terapkan satu estimasi ke seluruh baris. */
+    function samakanEstimasi(kat) {
+      for (const i of pos.keranjang) {
+        i.katId = kat.id;
+        i.jam = kat.jam;
+        i.estNama = kat.nama;
+      }
+      hargakanUlang();
+    }
+
+    const pilihanEstimasi = (terpilih) =>
+      DB.kategoriAktif()
+        .slice()
+        .sort((a, b) => a.jam - b.jam)
+        .map((k) => {
+          const sama = k.nama.replace(/\s+/g, '').toLowerCase() === lamaTeks(k.jam).replace(/\s+/g, '').toLowerCase();
+          const label = sama ? lamaTeks(k.jam) : `${lamaTeks(k.jam)} — ${k.nama}`;
+          return `<option value="${k.id}"${k.id === terpilih ? ' selected' : ''}>${esc(label)}</option>`;
+        })
+        .join('');
 
     function gambarKeranjang() {
       const box = el.querySelector('#cartItems');
@@ -429,9 +456,13 @@ window.Views = (function () {
           </div>
           <div class="muted cart-item-harga" style="font-size:13px">${
             i.tersedia === false
-              ? `<b style="color:var(--danger)">Tidak dilayani ${esc(pos.estimasi?.nama || '')}</b> — pilih kecepatan lain atau hapus baris ini`
+              ? `<b style="color:var(--danger)">Tidak dilayani ${esc(i.estNama || '')}</b> — pilih kecepatan lain atau hapus baris ini`
               : `${U.rupiah(i.harga)} / ${esc(i.satuan)}`
           }</div>
+          <label class="cart-item-est">
+            <span class="muted">Selesai</span>
+            <select class="input" data-est="${idx}">${pilihanEstimasi(i.katId)}</select>
+          </label>
           <div class="qty">
             <button type="button" data-kurang="${idx}">−</button>
             <input type="number" inputmode="decimal" min="0" step="${i.satuan === 'pcs' ? '1' : '0.1'}" value="${i.qty}" data-qty="${idx}">
@@ -443,6 +474,7 @@ window.Views = (function () {
             )
             .join('')
         : `<p class="empty">Belum ada layanan dipilih.<br>Ketuk kartu layanan untuk menambah.</p>`;
+      perbaruiEstimasi();
       hitung();
     }
 
@@ -513,8 +545,9 @@ window.Views = (function () {
       el.querySelector('#sumTotal').textContent = U.rupiah(total);
       const adaNama = !!el.querySelector('#inpNama').value.trim();
       const adaTolak = pos.keranjang.some((i) => i.tersedia === false);
+      const adaTanpaEstimasi = pos.keranjang.some((i) => !i.jam);
       el.querySelector('#btnSimpan').disabled =
-        pos.keranjang.length === 0 || !adaNama || !pos.estimasi || adaTolak || bulatSalah;
+        pos.keranjang.length === 0 || !adaNama || adaTanpaEstimasi || adaTolak || bulatSalah;
       const info = el.querySelector('#infoKembali');
       if (nanti) info.textContent = 'Dibayar saat pengambilan — cara bayarnya dipilih nanti.';
       else if (bayar === 0) info.textContent = 'Belum dibayar — pesanan ditandai "belum lunas".';
@@ -532,6 +565,19 @@ window.Views = (function () {
     const infoEstimasi = el.querySelector('#infoEstimasi');
 
     function perbaruiEstimasi() {
+      const jamBaris = pos.keranjang.map((i) => Number(i.jam) || 0).filter(Boolean);
+      if (jamBaris.length) {
+        /* Yang dijanjikan ke pelanggan adalah saat SELURUH nota siap, yaitu
+           baris yang paling lama. Barangnya diambil sekaligus. */
+        const paling = Math.max(...jamBaris);
+        const beda = new Set(jamBaris).size > 1;
+        const selesai = U.tambahJam(new Date().toISOString(), paling);
+        infoEstimasi.textContent = beda
+          ? `Waktu pengerjaan berbeda-beda. Seluruh nota siap ${U.estimasi(selesai)}.`
+          : `Selesai ${U.estimasi(selesai)}`;
+        infoEstimasi.className = 'petunjuk-ok';
+        return;
+      }
       if (!pos.estimasi) {
         infoEstimasi.textContent = 'Pilih dulu — menentukan janji selesai di nota.';
         infoEstimasi.className = 'muted';
@@ -548,7 +594,7 @@ window.Views = (function () {
       pos.estimasi = { id: b.dataset.id, jam: Number(b.dataset.jam), nama: b.dataset.nama };
       segEstimasi.querySelectorAll('button').forEach((x) => x.classList.remove('is-active'));
       b.classList.add('is-active');
-      hargakanUlang();
+      samakanEstimasi(pos.estimasi);
       perbaruiEstimasi();
       gambarLayanan();
       gambarKeranjang();
@@ -600,6 +646,10 @@ window.Views = (function () {
           tersedia: h.tersedia,
           durasi: l.durasi,
           qty: 1,
+          // Mewarisi pilihan di bawah keranjang; tinggal diubah kalau beda.
+          katId: pos.estimasi?.id || null,
+          jam: pos.estimasi?.jam || 0,
+          estNama: pos.estimasi?.nama || '',
         });
       }
       gambarKeranjang();
@@ -627,6 +677,18 @@ window.Views = (function () {
     });
 
     el.querySelector('#cartItems').addEventListener('change', (e) => {
+      if (e.target.dataset.est !== undefined) {
+        const i = +e.target.dataset.est;
+        const kat = DB.cariKategori(e.target.value);
+        if (!kat) return;
+        pos.keranjang[i].katId = kat.id;
+        pos.keranjang[i].jam = kat.jam;
+        pos.keranjang[i].estNama = kat.nama;
+        hargakanUlang();
+        perbaruiEstimasi();
+        gambarKeranjang();
+        return;
+      }
       if (e.target.dataset.qty === undefined) return;
       const i = +e.target.dataset.qty;
       pos.keranjang[i].qty = Math.max(0, Number(e.target.value) || 0);
@@ -672,13 +734,14 @@ window.Views = (function () {
         return U.toast('Nama pelanggan wajib diisi');
       }
 
-      if (!pos.estimasi) {
+      const tanpaEstimasi = pos.keranjang.find((i) => !i.jam);
+      if (tanpaEstimasi) {
         segEstimasi.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return U.toast('Pilih estimasi selesai dulu');
       }
 
       const tolak = pos.keranjang.find((i) => i.tersedia === false);
-      if (tolak) return U.toast(`${tolak.nama} tidak dilayani ${pos.estimasi.nama}`);
+      if (tolak) return U.toast(`${tolak.nama} tidak dilayani ${tolak.estNama}`);
 
       const item = pos.keranjang.filter((i) => i.qty > 0).map((i) => ({ ...i, subtotal: i.qty * i.harga }));
       if (!item.length) return U.toast('Isi jumlah dulu');
@@ -693,8 +756,9 @@ window.Views = (function () {
         total,
         dibayar: Math.min(bayar, total),
         diterima: bayar,
-        jam: pos.estimasi.jam,
-        estimasiNama: pos.estimasi.nama,
+        // Lama pengerjaan nota kini berasal dari barisnya masing-masing;
+        // js/db.js yang menyimpulkan kapan seluruh nota siap.
+
         kasir: Auth.aktif()?.nama,
         metode,
         catatan: el.querySelector('#inpCatatan').value,
@@ -766,7 +830,7 @@ window.Views = (function () {
         <div><span>Pelanggan</span><b>${esc(p.pelanggan.nama)}</b></div>
         <div><span>Total</span><b>${U.rupiah(p.total)}</b></div>
         ${sisa ? `<div class="sukses-sisa"><span>Sisa bayar</span><b>${U.rupiah(sisa)}</b></div>` : '<div><span>Pembayaran</span><b>Lunas</b></div>'}
-        <div><span>Estimasi selesai</span><b>${U.estimasi(p.estimasiSelesai)}${p.estimasiNama ? ` (${esc(p.estimasiNama)})` : ''}</b></div>
+        <div><span>${jadwalBeda(p) ? 'Semua siap' : 'Estimasi selesai'}</span><b>${U.estimasi(p.estimasiSelesai)}${p.estimasiNama ? ` (${esc(p.estimasiNama)})` : ''}</b></div>
       </div>
       <div class="sukses-aksi">
         <button type="button" class="btn btn-primary btn-block" data-aksi="cetak">🖨️ Cetak Struk Pelanggan</button>
@@ -992,13 +1056,15 @@ window.Views = (function () {
       <h3>${esc(p.kode)} ${badgeStatus(p.status)}</h3>
       <p class="muted" style="margin-top:-6px">
         ${esc(p.pelanggan.nama)} • ${esc(p.pelanggan.hp || 'tanpa HP')}<br>
-        Masuk ${U.tanggalJam(p.dibuat)} • Estimasi ${U.estimasi(p.estimasiSelesai)}${p.estimasiNama ? ` (${esc(p.estimasiNama)})` : ''}
+        Masuk ${U.tanggalJam(p.dibuat)} • ${jadwalBeda(p) ? 'Semua siap' : 'Estimasi'} ${U.estimasi(p.estimasiSelesai)}${p.estimasiNama ? ` (${esc(p.estimasiNama)})` : ''}
         ${p.kasir && p.kasir !== '-' ? `<br>Diterima oleh ${esc(p.kasir)}` : ''}
       </p>
       <div class="table-wrap"><table>
         ${p.item
           .map(
-            (i) => `<tr><td>${esc(i.nama)}<div class="muted" style="font-size:12px">${U.angka(i.qty)} ${esc(i.satuan)} × ${U.rupiah(i.harga)}</div></td>
+            (i) => `<tr><td>${esc(i.nama)}<div class="muted" style="font-size:12px">${U.angka(i.qty)} ${esc(i.satuan)} × ${U.rupiah(i.harga)}${
+                      jadwalBeda(p) && i.estimasiSelesai ? ` • selesai ${esc(U.estimasi(i.estimasiSelesai))}` : ''
+                    }</div></td>
                     <td class="right">${U.rupiah(i.subtotal)}</td></tr>`
           )
           .join('')}
@@ -2134,6 +2200,11 @@ window.Views = (function () {
       }
       <div class="mt"></div>`;
   }
+
+  /* Nota boleh memuat beberapa kecepatan sekaligus; kalau jadwalnya memang
+     berbeda, tiap barisnya harus menyebut waktunya sendiri. */
+  const jadwalBeda = (p) =>
+    new Set((p.item || []).map((i) => i.estimasiSelesai || '').filter(Boolean)).size > 1;
 
   const NAMA_BAYAR = { tunai: 'Tunai', transfer: 'Transfer', qris: 'QRIS', nanti: 'Bayar nanti' };
   const namaBayar = (m) => NAMA_BAYAR[m] || m || 'Tunai';

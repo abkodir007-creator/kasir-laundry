@@ -17,6 +17,13 @@ window.Receipt = (function () {
 
   const ukuran = () => UKURAN[String(DB.toko().lebarStruk) === '80' ? 80 : 58];
 
+  /* Satu nota boleh memuat beberapa kecepatan sekaligus. Kalau memang
+     berbeda, jadwalnya harus tercetak PER BARIS — tanpa itu pegawai cuma
+     melihat satu tanggal di kepala struk dan seragam kilat ikut mengantre
+     di belakang selimut reguler. */
+  const jadwalBeda = (p) =>
+    new Set((p.item || []).map((i) => i.estimasiSelesai || '').filter(Boolean)).size > 1;
+
   /* Dua bentuk struk untuk dua pembaca yang berbeda:
 
      - 'pelanggan' : bukti pembayaran. Rincian harga yang menonjol.
@@ -31,6 +38,7 @@ window.Receipt = (function () {
   function htmlPelanggan(p) {
     const t = DB.toko();
     const u = ukuran();
+    const beda = jadwalBeda(p);
     const baris = p.item
       .map(
         (i) => `
@@ -40,7 +48,8 @@ window.Receipt = (function () {
         <tr>
           <td>${U.angka(i.qty)} ${U.esc(i.satuan)} x ${U.rupiah(i.harga)}</td>
           <td class="r">${U.rupiah(i.subtotal)}</td>
-        </tr>`
+        </tr>
+        ${beda && i.estimasiSelesai ? `<tr><td colspan="2" class="kecil">selesai ${U.esc(U.estimasi(i.estimasiSelesai))}${i.estimasiNama ? ` (${U.esc(i.estimasiNama)})` : ''}</td></tr>` : ''}`
       )
       .join('');
 
@@ -74,7 +83,7 @@ window.Receipt = (function () {
     <tr><td>No.</td><td class="r">${U.esc(p.kode)}</td></tr>
     <tr><td>Tanggal</td><td class="r">${U.tanggalJam(p.dibuat)}</td></tr>
     <tr><td>Pelanggan</td><td class="r">${U.esc(p.pelanggan.nama)}</td></tr>
-    <tr><td>Estimasi</td><td class="r">${U.estimasi(p.estimasiSelesai)}</td></tr>
+    <tr><td>${beda ? 'Semua siap' : 'Estimasi'}</td><td class="r">${U.estimasi(p.estimasiSelesai)}</td></tr>
     ${p.estimasiNama ? `<tr><td>Layanan</td><td class="r">${U.esc(p.estimasiNama)}</td></tr>` : ''}
     ${p.kasir && p.kasir !== '-' ? `<tr><td>Kasir</td><td class="r">${U.esc(p.kasir)}</td></tr>` : ''}
   </table>
@@ -105,13 +114,23 @@ window.Receipt = (function () {
   function htmlToko(p) {
     const t = DB.toko();
     const u = ukuran();
+    const beda = jadwalBeda(p);
     const baris = p.item
       .map(
-        (i) => `<tr><td>${U.esc(i.nama)}</td>
+        (i) => `<tr><td>${U.esc(i.nama)}${beda && i.estimasiSelesai ? `<div class="kecil">⏱ ${U.esc(U.estimasi(i.estimasiSelesai))}</div>` : ''}</td>
                 <td class="r">${U.angka(i.qty)} ${U.esc(i.satuan)}</td></tr>`
       )
       .join('');
     const sisa = Math.max(0, p.total - p.dibayar);
+
+    /* Yang ditonjolkan di label adalah tenggat PALING DEKAT, bukan saat
+       seluruh nota siap. Label ini menempel di keranjang dan dibaca pegawai
+       cuci, dan yang menentukan urutan kerja mereka adalah helai yang
+       jatuh tempo lebih dulu. Tanggal pengambilan tetap tercetak di bawah
+       supaya tidak ada yang keliru menyerahkan barang setengah jadi. */
+    const tenggat = beda
+      ? p.item.map((i) => i.estimasiSelesai).filter(Boolean).sort()[0]
+      : p.estimasiSelesai;
 
     return `<!DOCTYPE html><html lang="id"><head><meta charset="utf-8">
 <title>Label ${U.esc(p.kode)}</title>
@@ -142,8 +161,9 @@ window.Receipt = (function () {
   ${p.pelanggan.hp ? `<div class="kecil">${U.esc(p.pelanggan.hp)}</div>` : ''}
 
   <div class="sep"></div>
-  <div class="label">SELESAI${p.estimasiNama ? ' — ' + U.esc(p.estimasiNama).toUpperCase() : ''}</div>
-  <div class="sedang">${U.esc(U.estimasi(p.estimasiSelesai))}</div>
+  <div class="label">${beda ? 'TENGGAT TERDEKAT' : 'SELESAI'}${!beda && p.estimasiNama ? ' — ' + U.esc(p.estimasiNama).toUpperCase() : ''}</div>
+  <div class="sedang">${U.esc(U.estimasi(tenggat))}</div>
+  ${beda ? `<div class="kecil">Semua siap ${U.esc(U.estimasi(p.estimasiSelesai))} — jadwal tiap barang di bawah</div>` : ''}
 
   <div class="garis-tebal"></div>
   <table>${baris}</table>
@@ -182,7 +202,14 @@ window.Receipt = (function () {
 
   function teks(p) {
     const t = DB.toko();
-    const item = p.item.map((i) => `• ${i.nama} ${U.angka(i.qty)} ${i.satuan} = ${U.rupiah(i.subtotal)}`).join('\n');
+    const beda = jadwalBeda(p);
+    const item = p.item
+      .map(
+        (i) =>
+          `• ${i.nama} ${U.angka(i.qty)} ${i.satuan} = ${U.rupiah(i.subtotal)}` +
+          (beda && i.estimasiSelesai ? `\n   selesai ${U.estimasi(i.estimasiSelesai)}` : '')
+      )
+      .join('\n');
     const sisa = Math.max(0, p.total - p.dibayar);
     return (
       `*${t.nama}*\n` +
@@ -194,7 +221,7 @@ window.Receipt = (function () {
       (p.pembulatan ? `Pembulatan: ${p.pembulatan > 0 ? '+' : '−'}${U.rupiah(Math.abs(p.pembulatan))}\n` : '') +
       `*Total: ${U.rupiah(p.total)}*\n` +
       (sisa > 0 ? `Sisa bayar: ${U.rupiah(sisa)}\n` : `Status: LUNAS\n`) +
-      `Estimasi selesai: ${U.estimasi(p.estimasiSelesai)}\n\n` +
+      `${beda ? 'Semua siap' : 'Estimasi selesai'}: ${U.estimasi(p.estimasiSelesai)}\n\n` +
       `Terima kasih 🙏`
     );
   }

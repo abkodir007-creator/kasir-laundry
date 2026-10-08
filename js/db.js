@@ -526,17 +526,33 @@ window.DB = (function () {
 
   function buatPesanan(input) {
     const sekarang = new Date().toISOString();
-    /* Lama pengerjaan dipilih kasir di keranjang dan berlaku untuk seluruh
-       nota. Nota lama serta data hasil impor belum punya angka itu, jadi
-       masih ada jalan mundur ke lama per layanan. */
-    const maksJam = Number(input.jam) > 0
-      ? Number(input.jam)
-      : Math.max(1, ...input.item.map((i) => Number(i.jam) || (Number(i.durasi) || 1) * 24));
+
+    /* Setiap baris membawa lama pengerjaannya sendiri, jadi satu nota boleh
+       memuat selimut reguler dan seragam kilat sekaligus. Masing-masing
+       disimpan dengan waktu selesainya sendiri supaya pegawai tahu mana
+       yang harus dikerjakan lebih dulu.
+
+       Yang dijanjikan ke pelanggan adalah baris yang PALING LAMA: barangnya
+       diambil sekaligus, jadi nota baru benar-benar siap saat helai terakhir
+       selesai. Menjanjikan yang tercepat berarti menjanjikan sesuatu yang
+       belum tentu ada di meja saat pelanggan datang.
+
+       input.jam masih diterima demi nota lama dan data hasil impor yang
+       belum punya angka per baris. */
+    const jamBaris = (i) => Number(i.jam) || Number(input.jam) || (Number(i.durasi) || 1) * 24;
+    const item = input.item.map((i) => ({
+      ...i,
+      jam: jamBaris(i),
+      estimasiNama: i.estimasiNama || i.estNama || input.estimasiNama || '',
+      estimasiSelesai: U.tambahJam(sekarang, jamBaris(i)),
+    }));
+    const maksJam = Math.max(1, ...item.map((i) => i.jam));
+    const namaEstimasi = new Set(item.map((i) => i.estimasiNama).filter(Boolean));
     const p = {
       id: U.idBaru(),
       kode: kodeBaru(),
       pelanggan: { nama: input.nama.trim() || 'Tanpa Nama', hp: (input.hp || '').trim() },
-      item: input.item,
+      item,
       subtotal: input.subtotal,
       diskon: input.diskon || 0,
       // Selisih pembulatan disimpan sendiri, bukan dilebur ke diskon:
@@ -554,7 +570,10 @@ window.DB = (function () {
       dibuat: sekarang,
       estimasiSelesai: U.tambahJam(sekarang, maksJam),
       jamPengerjaan: maksJam,
-      estimasiNama: input.estimasiNama || '',
+      // Satu nama kalau seragam; kalau tidak, pembacanya diarahkan ke rincian
+      // per baris alih-alih diberi satu nama yang tidak mewakili apa pun.
+      estimasiNama: namaEstimasi.size === 1 ? [...namaEstimasi][0] : namaEstimasi.size ? 'Campuran' : '',
+      estimasiCampuran: namaEstimasi.size > 1,
       riwayat: [{ status: 'antrian', waktu: sekarang }],
     };
     state.pesanan.unshift(p);
